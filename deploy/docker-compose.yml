@@ -1,0 +1,101 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: linuxops-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-linuxops_db}
+      POSTGRES_USER: ${POSTGRES_USER:-linuxops_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeThisPasswordSecurely!}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - linuxops-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-linuxops_user} -d ${POSTGRES_DB:-linuxops_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    container_name: linuxops-backend
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      SECRET_KEY: ${SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      POSTGRES_SERVER: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-linuxops_db}
+      POSTGRES_USER: ${POSTGRES_USER:-linuxops_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ChangeThisPasswordSecurely!}
+      PKI_CA_DIR: /etc/linuxops/pki
+      PKI_CA_CERT: /etc/linuxops/pki/ca.crt
+      PKI_CA_KEY: /etc/linuxops/pki/ca.key
+      APP_URL: ${APP_URL:-https://linuxops.local}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://linuxops.local}
+    volumes:
+      - pki_data:/etc/linuxops/pki
+    networks:
+      - linuxops-internal
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: linuxops-frontend
+    restart: unless-stopped
+    networks:
+      - linuxops-internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  proxy:
+    image: nginx:1.27-alpine
+    container_name: linuxops-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - linuxops-internal
+    depends_on:
+      - backend
+      - frontend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+networks:
+  linuxops-internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  pki_data:
+

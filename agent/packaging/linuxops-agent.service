@@ -1,0 +1,33 @@
+[Unit]
+Description=LinuxOps Manager Agent
+Documentation=https://linuxops.local/docs
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=linuxops-agent
+Group=linuxops-agent
+EnvironmentFile=/etc/linuxops-agent/agent.env
+ExecStart=/opt/linuxops-agent/venv/bin/python -m linuxops_agent.daemon
+Restart=always
+RestartSec=5s
+
+# Endurecimiento del Servicio (Systemd Hardening)
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/linuxops-agent /var/log/linuxops-agent
+ReadOnlyPaths=/etc/linuxops-agent
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+NoNewPrivileges=false
+
+# Límites de consumo de recursos
+MemoryMax=256M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target
+
