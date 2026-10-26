@@ -33,6 +33,9 @@ class AgentDaemon:
 
     def _setup_ssl_context(self) -> Optional[ssl.SSLContext]:
         """Configura el contexto mTLS con certificados de cliente y CA interna."""
+        if config.ws_url.startswith("ws://"):
+            return None
+
         if not (os.path.exists(config.CA_CERT_PATH) and 
                 os.path.exists(config.AGENT_CERT_PATH) and 
                 os.path.exists(config.AGENT_KEY_PATH)):

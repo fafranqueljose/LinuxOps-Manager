@@ -86,14 +86,37 @@ class DockerManager:
                         "type": p_type,
                     })
 
+            # Obtener image_id de forma segura sin disparar excepción 404 si la imagen fue borrada
+            image_id = attrs.get("Image", "")
+            if not image_id:
+                try:
+                    image_id = c.image.id if c.image else ""
+                except Exception:
+                    image_id = ""
+
+            raw_created = attrs.get("Created", 0)
+            created_ts = 0
+            if isinstance(raw_created, (int, float)):
+                created_ts = int(raw_created)
+            elif isinstance(raw_created, str):
+                if raw_created.isdigit():
+                    created_ts = int(raw_created[:10])
+                else:
+                    try:
+                        import datetime
+                        dt = datetime.datetime.fromisoformat(raw_created.replace("Z", "+00:00"))
+                        created_ts = int(dt.timestamp())
+                    except Exception:
+                        created_ts = 0
+
             result.append({
                 "id": c.id,
                 "names": [attrs.get("Name", "").lstrip("/")],
-                "image": attrs.get("Config", {}).get("Image", ""),
-                "image_id": c.image.id if c.image else "",
+                "image": attrs.get("Config", {}).get("Image", "") or image_id[:12] or "unknown",
+                "image_id": image_id,
                 "state": c.status,
                 "status": attrs.get("State", {}).get("Status", c.status),
-                "created": int(attrs.get("Created", "0")[:10]) if attrs.get("Created", "").isdigit() else 0,
+                "created": created_ts,
                 "ports": ports_list,
                 "compose_project": compose_project,
                 "compose_service": compose_service,
@@ -148,7 +171,11 @@ class DockerManager:
         images = client.images.list()
         containers = client.containers.list(all=True)
 
-        used_image_ids = {c.image.id for c in containers if c.image}
+        used_image_ids = set()
+        for c in containers:
+            img_id = c.attrs.get("Image")
+            if img_id:
+                used_image_ids.add(img_id)
 
         result = []
         for img in images:

@@ -131,3 +131,16 @@ export interface Alert {
   created_at: string;
 }
 
+export interface TerminalSessionOut {
+  id: string;
+  server_id: string;
+  user_id: string;
+  pty_user: string;
+  status: string;
+  client_ip?: string;
+  started_at: string;
+  closed_at?: string;
+  duration_seconds: number;
+}
+
+

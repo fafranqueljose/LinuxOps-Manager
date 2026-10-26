@@ -3,7 +3,7 @@ LinuxOps Manager — Configuración Global de la Aplicación
 Utiliza Pydantic Settings para cargar variables de entorno y validar tipos.
 """
 
-from typing import List, Union
+from typing import Any, List, Union
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 120
 
     # CORS
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: Any = [
         "https://linuxops.local",
         "http://localhost:3000",
         "http://localhost:5173",
@@ -76,11 +76,20 @@ class Settings(BaseSettings):
     ]
 
     @field_validator("CORS_ORIGINS", mode="before")
-    def parse_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",") if i.strip()]
-        elif isinstance(v, list):
-            return v
+    def parse_cors_origins(cls, v: Any) -> List[str]:
+        if isinstance(v, str):
+            v_stripped = v.strip()
+            if v_stripped.startswith("[") and v_stripped.endswith("]"):
+                try:
+                    import json
+                    parsed = json.loads(v_stripped)
+                    if isinstance(parsed, list):
+                        return [str(i).strip() for i in parsed if str(i).strip()]
+                except Exception:
+                    pass
+            return [i.strip() for i in v_stripped.split(",") if i.strip()]
+        elif isinstance(v, (list, tuple, set)):
+            return [str(i).strip() for i in v if str(i).strip()]
         return []
 
     # Configuración de Terminal Web

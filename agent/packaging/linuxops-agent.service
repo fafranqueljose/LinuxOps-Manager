@@ -8,6 +8,8 @@ Wants=network-online.target
 Type=simple
 User=linuxops-agent
 Group=linuxops-agent
+WorkingDirectory=/opt/linuxops-agent
+Environment="PYTHONPATH=/opt/linuxops-agent"
 EnvironmentFile=/etc/linuxops-agent/agent.env
 ExecStart=/opt/linuxops-agent/venv/bin/python -m linuxops_agent.daemon
 Restart=always
@@ -17,7 +19,7 @@ RestartSec=5s
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/lib/linuxops-agent /var/log/linuxops-agent
-ReadOnlyPaths=/etc/linuxops-agent
+ReadOnlyPaths=/etc/linuxops-agent /opt/linuxops-agent
 PrivateTmp=true
 ProtectKernelTunables=true
 ProtectControlGroups=true

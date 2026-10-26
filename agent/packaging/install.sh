@@ -61,9 +61,10 @@ chown -R linuxops-agent:linuxops-agent "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
 chmod 750 "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
 
 # 3. Copiar código fuente del agente
-cp -r linuxops_agent "$INSTALL_DIR/"
-cp requirements.txt "$INSTALL_DIR/"
-cp packaging/enroll.py "$INSTALL_DIR/"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cp -r "$SCRIPT_DIR/linuxops_agent" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
+cp "$SCRIPT_DIR/packaging/enroll.py" "$INSTALL_DIR/"
 
 # 4. Crear entorno virtual Python
 python3 -m venv "$INSTALL_DIR/venv"
@@ -100,7 +101,7 @@ EOF
 chmod 440 /etc/sudoers.d/linuxops-agent
 
 # 8. Instalar y arrancar servicio systemd
-cp packaging/linuxops-agent.service /etc/systemd/system/
+cp "$SCRIPT_DIR/packaging/linuxops-agent.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now linuxops-agent
 

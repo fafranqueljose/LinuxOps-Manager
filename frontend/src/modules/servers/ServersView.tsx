@@ -40,7 +40,7 @@ export const ServersView: React.FC = () => {
 
   const createServerMutation = useMutation({
     mutationFn: (data: { name: string; hostname?: string }) => api.post<any>('/servers', data),
-    onSuccess: (data) => {
+    onSuccess: (data: any) => {
       setEnrollmentData({
         install_command: data.install_command,
         token: data.enrollment_token,
