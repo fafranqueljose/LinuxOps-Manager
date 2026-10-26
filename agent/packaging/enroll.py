@@ -13,7 +13,15 @@ from linuxops_agent.collectors.system_collector import system_collector
 from linuxops_agent.security.csr_generator import generate_agent_key_and_csr
 
 
-def enroll(server_url: str, token: str, server_id: str, cert_dir: str, insecure: bool = False):
+def enroll(
+    server_url: str,
+    token: str,
+    server_id: str,
+    cert_dir: str,
+    insecure: bool = False,
+    hostname: str = "",
+    ip_address: str = "",
+):
     print(f"[*] Iniciando incorporación segura en {server_url}...")
     os.makedirs(cert_dir, exist_ok=True)
     key_path = os.path.join(cert_dir, "agent.key")
@@ -29,6 +37,12 @@ def enroll(server_url: str, token: str, server_id: str, cert_dir: str, insecure:
 
     # 2. Recopilar datos estáticos de SO
     os_info = system_collector.get_static_os_info()
+    if hostname:
+        os_info["hostname"] = hostname
+    if ip_address:
+        os_info["ip_address"] = ip_address
+
+    print(f"[*] Datos del host: Hostname={os_info.get('hostname')} | IP={os_info.get('ip_address')}")
 
     # 3. Enviar CSR y token al endpoint de enrolamiento
     enroll_url = f"{server_url.rstrip('/')}/api/v1/agents/enroll"
@@ -75,6 +89,16 @@ if __name__ == "__main__":
     parser.add_argument("--server-id", required=True, help="UUID del servidor en el inventario")
     parser.add_argument("--cert-dir", default="/etc/linuxops-agent/certs", help="Directorio de certificados")
     parser.add_argument("--insecure", action="store_true", help="Permitir certificados TLS autofirmados")
+    parser.add_argument("--hostname", default="", help="Hostname del servidor")
+    parser.add_argument("--ip-address", default="", help="Dirección IP principal del servidor")
 
     args = parser.parse_args()
-    enroll(args.server_url, args.token, args.server_id, args.cert_dir, args.insecure)
+    enroll(
+        server_url=args.server_url,
+        token=args.token,
+        server_id=args.server_id,
+        cert_dir=args.cert_dir,
+        insecure=args.insecure,
+        hostname=args.hostname,
+        ip_address=args.ip_address,
+    )

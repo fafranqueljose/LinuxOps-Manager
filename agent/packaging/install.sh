@@ -41,10 +41,26 @@ if [[ -z "$SERVER_URL" || -z "$TOKEN" || -z "$SERVER_ID" ]]; then
   exit 1
 fi
 
+# Detectar Hostname del servidor
+DETECTED_HOSTNAME=$(hostname -f 2>/dev/null || hostname 2>/dev/null || uname -n)
+
+# Detectar Dirección IP Principal de la máquina
+DETECTED_IP=""
+if command -v ip &>/dev/null; then
+  DETECTED_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')
+  if [[ -z "$DETECTED_IP" ]]; then
+    DETECTED_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+  fi
+elif command -v ifconfig &>/dev/null; then
+  DETECTED_IP=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n1)
+fi
+
 echo "=========================================================="
-echo "Instalando LinuxOps Agent en $(hostname)..."
-echo "Servidor Central: $SERVER_URL"
-echo "Servidor ID: $SERVER_ID"
+echo "Instalando LinuxOps Agent en $DETECTED_HOSTNAME..."
+echo "Servidor Central:  $SERVER_URL"
+echo "Servidor ID:       $SERVER_ID"
+echo "Hostname Detectado: $DETECTED_HOSTNAME"
+echo "IP Principal:      ${DETECTED_IP:-No detectada}"
 echo "=========================================================="
 
 # 0. Instalar dependencias esenciales de sistema si faltan
@@ -121,6 +137,8 @@ ENROLL_ARGS=(
   "--token" "$TOKEN"
   "--server-id" "$SERVER_ID"
   "--cert-dir" "$CONFIG_DIR/certs"
+  "--hostname" "$DETECTED_HOSTNAME"
+  "--ip-address" "$DETECTED_IP"
 )
 if [[ "$INSECURE" == "1" ]]; then
   ENROLL_ARGS+=("--insecure")

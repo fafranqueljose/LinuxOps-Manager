@@ -6,7 +6,7 @@ import datetime
 from typing import List, Optional
 from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
@@ -318,6 +318,79 @@ async def get_server_metrics_history(
     return records
 
 
+@router.post("/{server_id}/reissue-token", response_model=EnrollmentInitResponse)
+async def reissue_enrollment_token(
+    server_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("agents:enroll")),
+):
+    """
+    Invalida los tokens anteriores y genera un nuevo token de incorporación de un solo uso
+    para un servidor existente, permitiendo reinstalar o reconectar el agente.
+    """
+    server = await db.get(Server, server_id)
+    if not server:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado.")
+
+    # Invalidar tokens anteriores activos para este servidor
+    stmt = (
+        update(EnrollmentToken)
+        .where(EnrollmentToken.server_id == server.id, EnrollmentToken.is_used.is_(False))
+        .values(is_used=True)
+    )
+    await db.execute(stmt)
+
+    # Generar nuevo token seguro
+    raw_enrollment_token = generate_secure_token(32)
+    token_hash = hash_token(raw_enrollment_token)
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(
+        minutes=settings.AGENT_ENROLLMENT_TOKEN_EXPIRE_MINUTES
+    )
+
+    token_record = EnrollmentToken(
+        server_id=server.id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        is_used=False,
+        created_by_user_id=current_user.id,
+    )
+    db.add(token_record)
+
+    # Si estaba revocado, permitir reactivación a estado pendiente
+    if server.status in ["revoked", "offline"]:
+        server.status = "pending_enrollment"
+
+    await db.flush()
+
+    correlation_id = str(uuid4())
+    client_ip = request.client.host if request.client else "unknown"
+    await AuditService.log_event(
+        db=db,
+        correlation_id=correlation_id,
+        operation="servers.reissue_token",
+        resource_type="server",
+        resource_id=str(server.id),
+        status="success",
+        user_id=current_user.id,
+        username=current_user.username,
+        client_ip=client_ip,
+        details={"server_name": server.name, "expires_at": expires_at.isoformat()},
+    )
+
+    install_cmd = (
+        f"curl -sSL {settings.APP_URL}/install-agent.sh | sudo bash -s -- "
+        f"--server-url {settings.APP_URL} --token {raw_enrollment_token} --server-id {server.id}"
+    )
+
+    return EnrollmentInitResponse(
+        server_id=server.id,
+        enrollment_token=raw_enrollment_token,
+        expires_at=expires_at,
+        install_command=install_cmd,
+    )
+
+
 @router.delete("/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_server(
     server_id: UUID,
@@ -328,6 +401,9 @@ async def delete_server(
     server = await db.get(Server, server_id)
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado.")
+
+    # Desconectar agente WebSocket si estuviese activo
+    agent_gateway.unregister_agent(server.id)
 
     correlation_id = str(uuid4())
     client_ip = request.client.host if request.client else "unknown"

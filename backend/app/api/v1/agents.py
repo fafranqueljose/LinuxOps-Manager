@@ -95,8 +95,15 @@ async def enroll_agent(
     # Actualizar datos de sistema del servidor
     os_info = req.os_info or {}
     server.status = "offline"  # Esperando primera conexión mTLS / heartbeat
-    server.hostname = os_info.get("hostname", server.hostname)
-    server.ip_address = request.client.host if request.client else server.ip_address
+    reported_hostname = os_info.get("hostname")
+    if reported_hostname:
+        server.hostname = reported_hostname
+
+    reported_ip = os_info.get("ip_address")
+    if reported_ip:
+        server.ip_address = reported_ip
+    elif not server.ip_address and request.client:
+        server.ip_address = request.client.host
     server.os_name = os_info.get("os_name", server.os_name)
     server.os_version = os_info.get("os_version", server.os_version)
     server.kernel = os_info.get("kernel", server.kernel)

@@ -15,6 +15,8 @@ import {
   ShieldAlert,
   AlertCircle,
   X,
+  Trash2,
+  KeyRound,
 } from 'lucide-react';
 
 export const ServersView: React.FC = () => {
@@ -49,9 +51,41 @@ export const ServersView: React.FC = () => {
     },
   });
 
+  const reissueTokenMutation = useMutation({
+    mutationFn: (serverId: string) => api.post<any>(`/servers/${serverId}/reissue-token`),
+    onSuccess: (data: any) => {
+      setEnrollmentData({
+        install_command: data.install_command,
+        token: data.enrollment_token,
+      });
+      setIsModalOpen(true);
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+    },
+    onError: (err: any) => alert(err?.message || 'Error al recrear token'),
+  });
+
+  const deleteServerMutation = useMutation({
+    mutationFn: (serverId: string) => api.delete(`/servers/${serverId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+    },
+    onError: (err: any) => alert(err?.message || 'Error al eliminar servidor'),
+  });
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     createServerMutation.mutate({ name: serverName, hostname: hostname || undefined });
+  };
+
+  const handleDelete = (s: Server) => {
+    if (confirm(`¿Está seguro de que desea eliminar el servidor "${s.name}"?\nEsta acción eliminará sus datos, métricas y desvinculará el agente.`)) {
+      deleteServerMutation.mutate(s.id);
+    }
+  };
+
+  const handleReissue = (s: Server) => {
+    reissueTokenMutation.mutate(s.id);
   };
 
   const copyToClipboard = (text: string) => {
@@ -150,7 +184,7 @@ export const ServersView: React.FC = () => {
                   <th className="py-3 px-4">RAM</th>
                   <th className="py-3 px-4">Docker</th>
                   <th className="py-3 px-4">Último Latido</th>
-                  <th className="py-3 px-4 text-right">Acción</th>
+                  <th className="py-3 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -193,13 +227,33 @@ export const ServersView: React.FC = () => {
                       {formatDate(s.last_heartbeat_at)}
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      <Link
-                        to={`/servers/${s.id}`}
-                        className="inline-flex items-center gap-1 text-slate-400 hover:text-brand-400 text-xs font-semibold transition-colors"
-                      >
-                        <span>Administrar</span>
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      </Link>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => handleReissue(s)}
+                          disabled={reissueTokenMutation.isPending}
+                          title="Recrear Token de Instalación"
+                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-400 rounded-lg transition-colors"
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
+                        </button>
+
+                        <button
+                          onClick={() => handleDelete(s)}
+                          disabled={deleteServerMutation.isPending}
+                          title="Eliminar Servidor"
+                          className="p-1.5 bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+
+                        <Link
+                          to={`/servers/${s.id}`}
+                          className="inline-flex items-center gap-1 text-slate-400 hover:text-brand-400 text-xs font-semibold px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors"
+                        >
+                          <span>Administrar</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -209,7 +263,7 @@ export const ServersView: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal de Incorporación Segura */}
+      {/* Modal de Incorporación Segura / Recreación de Token */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl p-6 shadow-2xl relative">
@@ -225,7 +279,9 @@ export const ServersView: React.FC = () => {
                 <ServerIcon className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-100 text-base">Incorporar Nuevo Servidor Linux</h3>
+                <h3 className="font-bold text-slate-100 text-base">
+                  {enrollmentData ? 'Credencial de Incorporación Generada' : 'Incorporar Nuevo Servidor Linux'}
+                </h3>
                 <p className="text-xs text-slate-400">Generación de credencial mTLS y comando de registro</p>
               </div>
             </div>
@@ -282,7 +338,7 @@ export const ServersView: React.FC = () => {
             ) : (
               <div className="space-y-4 animate-fadeIn">
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400">
-                  ¡Servidor registrado en el inventario! Ejecute el siguiente comando con permisos de superusuario en el servidor remoto para completar el mTLS:
+                  ¡Token generado con éxito! Ejecute el siguiente comando en el servidor remoto con permisos de superusuario (`sudo`):
                 </div>
 
                 <div className="relative">
@@ -298,12 +354,17 @@ export const ServersView: React.FC = () => {
                   </button>
                 </div>
 
+                <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl text-[11px] text-slate-400 space-y-1">
+                  <p><span className="font-semibold text-slate-300">Token:</span> <span className="font-mono text-brand-400">{enrollmentData.token}</span></p>
+                  <p className="text-slate-500">El instalador detectará automáticamente el hostname e IP del servidor remoto y configurará mTLS.</p>
+                </div>
+
                 <div className="flex justify-end pt-3">
                   <button
                     onClick={() => setIsModalOpen(false)}
                     className="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold"
                   >
-                    Listo
+                    Cerrar
                   </button>
                 </div>
               </div>
@@ -314,4 +375,3 @@ export const ServersView: React.FC = () => {
     </div>
   );
 };
-

@@ -7,11 +7,46 @@ import os
 import platform
 import subprocess
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import psutil
 
 
 class SystemCollector:
+    @staticmethod
+    def get_primary_ip() -> Optional[str]:
+        """Detecta la IP principal usada para enrutamiento saliente."""
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0.5)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            pass
+
+        try:
+            import socket
+            ip = socket.gethostbyname(platform.node())
+            if ip and not ip.startswith("127."):
+                return ip
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def get_hostname() -> str:
+        """Obtiene el nombre de host o FQDN del sistema."""
+        try:
+            import socket
+            fqdn = socket.getfqdn()
+            if fqdn and fqdn != "localhost":
+                return fqdn
+        except Exception:
+            pass
+        return platform.node()
+
     @staticmethod
     def get_static_os_info() -> Dict[str, Any]:
         """Obtiene información estática del sistema operativo y entorno."""
@@ -29,7 +64,8 @@ class SystemCollector:
                 pass
 
         return {
-            "hostname": platform.node(),
+            "hostname": SystemCollector.get_hostname(),
+            "ip_address": SystemCollector.get_primary_ip(),
             "os_name": os_name,
             "os_version": platform.release(),
             "kernel": platform.uname().release,
@@ -64,6 +100,8 @@ class SystemCollector:
         failed_services = SystemCollector._count_failed_services()
 
         return {
+            "hostname": SystemCollector.get_hostname(),
+            "ip_address": SystemCollector.get_primary_ip(),
             "uptime_seconds": uptime_seconds,
             "cpu_count": cpu_count,
             "cpu_percent": round(cpu_pct, 1),

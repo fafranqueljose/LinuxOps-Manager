@@ -70,6 +70,10 @@ async def agent_websocket_endpoint(websocket: WebSocket, server_id: UUID):
                     s = await db.get(Server, server_id)
                     if s:
                         s.last_heartbeat_at = now
+                        if metrics_data.get("hostname"):
+                            s.hostname = metrics_data["hostname"]
+                        if metrics_data.get("ip_address"):
+                            s.ip_address = metrics_data["ip_address"]
                         s.uptime_seconds = metrics_data.get("uptime_seconds", s.uptime_seconds)
                         s.cpu_percent = metrics_data.get("cpu_percent", s.cpu_percent)
                         s.ram_percent = metrics_data.get("ram_percent", s.ram_percent)
