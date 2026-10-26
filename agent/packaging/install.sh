@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ==============================================================================
-# LinuxOps Agent — Script de Instalación y Registro Automático
+# LinuxOps Agent — Script de Instalación y Registro Automático Remoto/Local
 # Compatible con: Ubuntu, Debian, RHEL, Rocky Linux, AlmaLinux
 # ==============================================================================
 
@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$SERVER_URL" || -z "$TOKEN" || -z "$SERVER_ID" ]]; then
-  echo "Uso: sudo bash install.sh --server-url <URL> --token <TOKEN> --server-id <UUID> [--insecure]"
+  echo "Uso: curl -sSL <URL>/install-agent.sh | sudo bash -s -- --server-url <URL> --token <TOKEN> --server-id <UUID> [--insecure]"
   exit 1
 fi
 
@@ -52,15 +52,15 @@ if command -v ip &>/dev/null; then
     DETECTED_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
   fi
 elif command -v ifconfig &>/dev/null; then
-  DETECTED_IP=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n1)
+  DETECTED_IP=$(ifconfig 2>/dev/null | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n1 || true)
 fi
 
 echo "=========================================================="
 echo "Instalando LinuxOps Agent en $DETECTED_HOSTNAME..."
-echo "Servidor Central:  $SERVER_URL"
-echo "Servidor ID:       $SERVER_ID"
+echo "Servidor Central:   $SERVER_URL"
+echo "Servidor ID:        $SERVER_ID"
 echo "Hostname Detectado: $DETECTED_HOSTNAME"
-echo "IP Principal:      ${DETECTED_IP:-No detectada}"
+echo "IP Principal:       ${DETECTED_IP:-No detectada}"
 echo "=========================================================="
 
 # 0. Instalar dependencias esenciales de sistema si faltan
@@ -68,7 +68,7 @@ if command -v apt-get &>/dev/null; then
   if ! command -v python3 &>/dev/null || ! python3 -c "import venv" &>/dev/null || ! command -v curl &>/dev/null || ! command -v tar &>/dev/null; then
     echo "[*] Instalando dependencias base (python3, python3-venv, python3-pip, curl, tar)..."
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -y && apt-get install -y python3 python3-venv python3-pip curl tar
+    apt-get update -y -qq && apt-get install -y -qq python3 python3-venv python3-pip curl tar
   fi
 elif command -v dnf &>/dev/null; then
   if ! command -v python3 &>/dev/null || ! command -v curl &>/dev/null || ! command -v tar &>/dev/null; then
@@ -103,35 +103,64 @@ mkdir -p "$INSTALL_DIR" "$CONFIG_DIR/certs" "$DATA_DIR" "$LOG_DIR"
 chown -R linuxops-agent:linuxops-agent "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$INSTALL_DIR"
 chmod 750 "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
 
-# 3. Descargar y extraer el paquete del agente desde el Servidor Central
-echo "[*] Descargando componentes del agente..."
-CURL_OPTS=("-sSL")
-if [[ "$INSECURE" == "1" ]]; then
-  CURL_OPTS+=("-k")
+# 3. Obtener código fuente del agente (local o descargado desde SERVER_URL)
+SCRIPT_DIR=""
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || true)"
 fi
 
-BUNDLE_URL="${SERVER_URL%/}/agent-bundle.tar.gz"
-TMP_TAR=$(mktemp /tmp/linuxops-agent-XXXXXX.tar.gz)
+if [[ -n "$SCRIPT_DIR" && -d "$SCRIPT_DIR/linuxops_agent" ]]; then
+  echo "[*] Copiando archivos de agente desde el repositorio local..."
+  cp -r "$SCRIPT_DIR/linuxops_agent" "$INSTALL_DIR/"
+  cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
+  mkdir -p "$INSTALL_DIR/packaging"
+  cp "$SCRIPT_DIR/packaging/enroll.py" "$INSTALL_DIR/packaging/"
+  cp "$SCRIPT_DIR/packaging/linuxops-agent.service" /etc/systemd/system/
+else
+  CLEAN_URL="${SERVER_URL%/}"
+  BUNDLE_URL="${CLEAN_URL}/agent-bundle.tar.gz"
+  echo "[*] Descargando paquete del agente desde $BUNDLE_URL..."
+  CURL_OPTS=("-sSL")
+  if [[ "$INSECURE" == "1" ]]; then
+    CURL_OPTS+=("-k")
+  fi
 
-# Intentar descargar el bundle
-if ! curl "${CURL_OPTS[@]}" "$BUNDLE_URL" -o "$TMP_TAR"; then
-  # Fallback a /api/v1/agents/bundle.tar.gz
-  BUNDLE_URL="${SERVER_URL%/}/api/v1/agents/bundle.tar.gz"
-  curl "${CURL_OPTS[@]}" "$BUNDLE_URL" -o "$TMP_TAR"
+  TMP_TAR=$(mktemp /tmp/linuxops-agent-XXXXXX.tar.gz)
+  if ! curl "${CURL_OPTS[@]}" "$BUNDLE_URL" -o "$TMP_TAR"; then
+    BUNDLE_URL="${CLEAN_URL}/api/v1/agents/bundle.tar.gz"
+    curl "${CURL_OPTS[@]}" "$BUNDLE_URL" -o "$TMP_TAR"
+  fi
+
+  tar -xzf "$TMP_TAR" -C "$INSTALL_DIR"
+  rm -f "$TMP_TAR"
+
+  if [[ -f "$INSTALL_DIR/packaging/linuxops-agent.service" ]]; then
+    cp "$INSTALL_DIR/packaging/linuxops-agent.service" /etc/systemd/system/
+  fi
 fi
 
-tar -xzf "$TMP_TAR" -C "$INSTALL_DIR"
-rm -f "$TMP_TAR"
-chown -R linuxops-agent:linuxops-agent "$INSTALL_DIR"
-
-# 4. Crear entorno virtual Python e instalar requerimientos
-echo "[*] Creando entorno virtual Python..."
+# 4. Crear entorno virtual Python e instalar dependencias
+echo "[*] Creando entorno virtual en $INSTALL_DIR/venv..."
 python3 -m venv "$INSTALL_DIR/venv"
-"$INSTALL_DIR/venv/bin/pip" install --upgrade pip --quiet
-"$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt" --quiet
+"$INSTALL_DIR/venv/bin/pip" install --upgrade pip -q
+"$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt" -q
+
+# Asegurar __init__.py en módulos
+touch "$INSTALL_DIR/linuxops_agent/__init__.py" \
+      "$INSTALL_DIR/linuxops_agent/collectors/__init__.py" \
+      "$INSTALL_DIR/linuxops_agent/docker_manager/__init__.py" \
+      "$INSTALL_DIR/linuxops_agent/security/__init__.py" \
+      "$INSTALL_DIR/linuxops_agent/systemd_manager/__init__.py" \
+      "$INSTALL_DIR/linuxops_agent/terminal_manager/__init__.py"
+
+# Registrar path del agente en site-packages usando el intérprete de Python (seguro y portable)
+"$INSTALL_DIR/venv/bin/python" -c "import site, os; p = site.getsitepackages(); [open(os.path.join(d, 'linuxops.pth'), 'w').write('$INSTALL_DIR\n') for d in p if os.path.isdir(d)]" || true
 
 # 5. Ejecutar incorporación segura y obtención de certificados mTLS
-echo "[*] Negociando credenciales mTLS y registrando agente..."
+echo "[*] Negociando certificado de agente con el servidor central..."
+ENROLL_SCRIPT="$INSTALL_DIR/packaging/enroll.py"
+[[ ! -f "$ENROLL_SCRIPT" ]] && ENROLL_SCRIPT="$INSTALL_DIR/enroll.py"
+
 ENROLL_ARGS=(
   "--server-url" "$SERVER_URL"
   "--token" "$TOKEN"
@@ -144,7 +173,7 @@ if [[ "$INSECURE" == "1" ]]; then
   ENROLL_ARGS+=("--insecure")
 fi
 
-PYTHONPATH="$INSTALL_DIR" "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/packaging/enroll.py" "${ENROLL_ARGS[@]}"
+PYTHONPATH="$INSTALL_DIR" "$INSTALL_DIR/venv/bin/python" "$ENROLL_SCRIPT" "${ENROLL_ARGS[@]}"
 
 chown -R linuxops-agent:linuxops-agent "$CONFIG_DIR/certs"
 chmod 600 "$CONFIG_DIR/certs/agent.key"
@@ -152,6 +181,7 @@ chmod 644 "$CONFIG_DIR/certs/agent.crt" "$CONFIG_DIR/certs/ca.crt"
 
 # 6. Escribir archivo de variables de entorno
 cat <<EOF > "$CONFIG_DIR/agent.env"
+PYTHONPATH=$INSTALL_DIR
 LINUXOPS_SERVER_URL=$SERVER_URL
 LINUXOPS_SERVER_ID=$SERVER_ID
 LINUXOPS_CA_CERT=$CONFIG_DIR/certs/ca.crt
@@ -161,6 +191,7 @@ LINUXOPS_DATA_DIR=$DATA_DIR
 EOF
 chmod 600 "$CONFIG_DIR/agent.env"
 chown linuxops-agent:linuxops-agent "$CONFIG_DIR/agent.env"
+chown -R linuxops-agent:linuxops-agent "$INSTALL_DIR"
 
 # 7. Configurar sudoers restrictivo solo para systemctl y journalctl sin password
 cat <<EOF > /etc/sudoers.d/linuxops-agent
@@ -169,11 +200,10 @@ EOF
 chmod 440 /etc/sudoers.d/linuxops-agent
 
 # 8. Instalar y arrancar servicio systemd
-cp "$INSTALL_DIR/packaging/linuxops-agent.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now linuxops-agent
 
 echo "=========================================================="
 echo "LinuxOps Agent instalado y activo correctamente."
-echo "Estado del servicio: $(systemctl is-active linuxops-agent)"
+echo "Estado: $(systemctl is-active linuxops-agent)"
 echo "=========================================================="
