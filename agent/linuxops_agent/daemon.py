@@ -1,4 +1,4 @@
-"""
+﻿"""
 LinuxOps Agent — Demonio Principal del Agente Linux
 Establece conexión saliente persistente hacia el backend central,
 reporta latidos y métricas periódicas, y procesa solicitudes autorizadas.
@@ -32,22 +32,42 @@ class AgentDaemon:
         self.terminal_sessions: Dict[str, PTYSession] = {}
 
     def _setup_ssl_context(self) -> Optional[ssl.SSLContext]:
-        """Configura el contexto mTLS con certificados de cliente y CA interna."""
+        """Configura el contexto TLS/mTLS con certificados de cliente y confianza de CA."""
         if config.ws_url.startswith("ws://"):
             return None
 
-        if not (os.path.exists(config.CA_CERT_PATH) and 
-                os.path.exists(config.AGENT_CERT_PATH) and 
-                os.path.exists(config.AGENT_KEY_PATH)):
-            # En entornos de desarrollo sin mTLS estricto configurado
-            return None
+        # Si se especifica modo inseguro explícito
+        if config.INSECURE:
+            logger.info("Modo SSL inseguro activado (verificación de certificado de servidor desactivada).")
+            ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            if os.path.exists(config.AGENT_CERT_PATH) and os.path.exists(config.AGENT_KEY_PATH):
+                try:
+                    ctx.load_cert_chain(certfile=config.AGENT_CERT_PATH, keyfile=config.AGENT_KEY_PATH)
+                except Exception as e:
+                    logger.warning(f"No se pudo cargar certificado de cliente mTLS: {e}")
+            return ctx
 
-        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=config.CA_CERT_PATH)
-        ctx.load_cert_chain(certfile=config.AGENT_CERT_PATH, keyfile=config.AGENT_KEY_PATH)
+        # Contexto estándar: carga los certificados CA raíz de confianza del sistema operativo
+        ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_REQUIRED
-        return ctx
 
+        # Incorporar la CA interna de LinuxOps a las CA de confianza si existe
+        if os.path.exists(config.CA_CERT_PATH):
+            try:
+                ctx.load_verify_locations(cafile=config.CA_CERT_PATH)
+            except Exception as e:
+                logger.debug(f"No se pudo cargar CA interna ({config.CA_CERT_PATH}): {e}")
+
+        # Cargar certificado y clave privada del agente para autenticación mTLS
+        if os.path.exists(config.AGENT_CERT_PATH) and os.path.exists(config.AGENT_KEY_PATH):
+            try:
+                ctx.load_cert_chain(certfile=config.AGENT_CERT_PATH, keyfile=config.AGENT_KEY_PATH)
+            except Exception as e:
+                logger.warning(f"No se pudo cargar certificado de cliente mTLS: {e}")
+
+        return ctx
     async def start(self):
         """Bucle principal del agente con reconexión automática tras caídas de red."""
         logger.info(f"Iniciando LinuxOps Agent v{config.AGENT_VERSION} para Servidor ID: {config.SERVER_ID}")

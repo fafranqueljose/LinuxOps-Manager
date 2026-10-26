@@ -208,6 +208,7 @@ LINUXOPS_CA_CERT=$CONFIG_DIR/certs/ca.crt
 LINUXOPS_AGENT_CERT=$CONFIG_DIR/certs/agent.crt
 LINUXOPS_AGENT_KEY=$CONFIG_DIR/certs/agent.key
 LINUXOPS_DATA_DIR=$DATA_DIR
+LINUXOPS_INSECURE=$([[ "$INSECURE" == "1" ]] && echo "true" || echo "false")
 EOF
 chmod 600 "$CONFIG_DIR/agent.env"
 chown linuxops-agent:linuxops-agent "$CONFIG_DIR/agent.env"

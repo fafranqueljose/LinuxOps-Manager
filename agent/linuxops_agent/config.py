@@ -17,6 +17,7 @@ class AgentConfig:
     CA_CERT_PATH: str = os.getenv("LINUXOPS_CA_CERT", "/etc/linuxops-agent/certs/ca.crt")
     AGENT_CERT_PATH: str = os.getenv("LINUXOPS_AGENT_CERT", "/etc/linuxops-agent/certs/agent.crt")
     AGENT_KEY_PATH: str = os.getenv("LINUXOPS_AGENT_KEY", "/etc/linuxops-agent/certs/agent.key")
+    INSECURE: bool = os.getenv("LINUXOPS_INSECURE", "false").lower() in ("true", "1", "yes")
     
     # Intervalos y Timeouts
     HEARTBEAT_INTERVAL_SECONDS: int = int(os.getenv("LINUXOPS_HEARTBEAT_INTERVAL", "15"))
