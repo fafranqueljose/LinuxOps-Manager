@@ -15,6 +15,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    tar \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear usuario y grupo no-root
@@ -24,6 +25,11 @@ RUN useradd -m -u 1000 -s /bin/bash appuser && \
 
 COPY --from=builder /install /usr/local
 COPY --chown=appuser:appuser backend /app
+COPY --chown=appuser:appuser agent /app/agent_source
+
+# Generar el tarball preempaquetado del agente
+RUN tar -czf /app/agent_bundle.tar.gz -C /app/agent_source . && \
+    chown appuser:appuser /app/agent_bundle.tar.gz
 
 USER appuser
 
@@ -39,4 +45,3 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-

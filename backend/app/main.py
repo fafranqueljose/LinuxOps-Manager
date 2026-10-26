@@ -3,10 +3,14 @@ LinuxOps Manager — Backend Central (FastAPI)
 """
 
 import datetime
+import io
 import logging
+import os
+import tarfile
 import uuid
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Response, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from app.core.config import settings
@@ -207,6 +211,64 @@ async def health_check():
         "environment": settings.ENVIRONMENT,
         "timestamp": datetime.datetime.utcnow().isoformat(),
     }
+
+
+# Endpoints de Distribución del Agente Linux
+@app.get("/install-agent.sh", response_class=PlainTextResponse, tags=["Agente"])
+@app.get("/api/v1/agents/install.sh", response_class=PlainTextResponse, tags=["Agente"])
+async def get_install_agent_script():
+    """
+    Retorna el script de instalación bash para ejecutar en el servidor remoto.
+    """
+    possible_paths = [
+        "/app/agent_source/packaging/install.sh",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../agent/packaging/install.sh")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../../agent/packaging/install.sh")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../agent/packaging/install.sh")),
+    ]
+    for p in possible_paths:
+        if os.path.isfile(p):
+            with open(p, "r", encoding="utf-8") as f:
+                return PlainTextResponse(f.read(), media_type="text/x-shellscript")
+
+    raise HTTPException(status_code=404, detail="Script de instalación no encontrado en el servidor central.")
+
+
+@app.get("/agent-bundle.tar.gz", tags=["Agente"])
+@app.get("/api/v1/agents/bundle.tar.gz", tags=["Agente"])
+async def get_agent_bundle():
+    """
+    Retorna el archivo comprimido (.tar.gz) con el código fuente y empaquetado del agente.
+    """
+    prebuilt_tar = "/app/agent_bundle.tar.gz"
+    if os.path.isfile(prebuilt_tar):
+        return FileResponse(prebuilt_tar, media_type="application/gzip", filename="linuxops-agent-bundle.tar.gz")
+
+    possible_dirs = [
+        "/app/agent_source",
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../agent")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../../agent")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../agent")),
+    ]
+    agent_dir = None
+    for d in possible_dirs:
+        if os.path.isdir(d):
+            agent_dir = d
+            break
+
+    if not agent_dir:
+        raise HTTPException(status_code=404, detail="Paquete del agente no encontrado en el servidor.")
+
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        tar.add(agent_dir, arcname=".")
+    buf.seek(0)
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/gzip",
+        headers={"Content-Disposition": 'attachment; filename="linuxops-agent-bundle.tar.gz"'},
+    )
 
 
 # Registrar Routers REST v1

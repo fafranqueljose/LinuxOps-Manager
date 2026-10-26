@@ -8,16 +8,20 @@ import json
 import os
 import sys
 import requests
+import urllib3
 from linuxops_agent.collectors.system_collector import system_collector
 from linuxops_agent.security.csr_generator import generate_agent_key_and_csr
 
 
-def enroll(server_url: str, token: str, server_id: str, cert_dir: str):
+def enroll(server_url: str, token: str, server_id: str, cert_dir: str, insecure: bool = False):
     print(f"[*] Iniciando incorporación segura en {server_url}...")
     os.makedirs(cert_dir, exist_ok=True)
     key_path = os.path.join(cert_dir, "agent.key")
     cert_path = os.path.join(cert_dir, "agent.crt")
     ca_path = os.path.join(cert_dir, "ca.crt")
+
+    if insecure:
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     # 1. Generar par de claves localmente y CSR
     print("[*] Generando par de claves RSA local (la clave privada nunca se transmite)...")
@@ -36,7 +40,7 @@ def enroll(server_url: str, token: str, server_id: str, cert_dir: str):
     }
 
     try:
-        resp = requests.post(enroll_url, json=payload, timeout=20)
+        resp = requests.post(enroll_url, json=payload, timeout=25, verify=not insecure)
         if resp.status_code != 200:
             print(f"[!] Error de enrolamiento ({resp.status_code}): {resp.text}", file=sys.stderr)
             sys.exit(1)
@@ -70,7 +74,7 @@ if __name__ == "__main__":
     parser.add_argument("--token", required=True, help="Token de enrolamiento de un solo uso")
     parser.add_argument("--server-id", required=True, help="UUID del servidor en el inventario")
     parser.add_argument("--cert-dir", default="/etc/linuxops-agent/certs", help="Directorio de certificados")
+    parser.add_argument("--insecure", action="store_true", help="Permitir certificados TLS autofirmados")
 
     args = parser.parse_args()
-    enroll(args.server_url, args.token, args.server_id, args.cert_dir)
-
+    enroll(args.server_url, args.token, args.server_id, args.cert_dir, args.insecure)

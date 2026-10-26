@@ -9,6 +9,7 @@ set -euo pipefail
 SERVER_URL=""
 TOKEN=""
 SERVER_ID=""
+INSECURE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -24,6 +25,10 @@ while [[ $# -gt 0 ]]; do
       SERVER_ID="$2"
       shift 2
       ;;
+    --insecure|-k)
+      INSECURE=1
+      shift
+      ;;
     *)
       echo "Parámetro desconocido: $1"
       exit 1
@@ -32,16 +37,38 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$SERVER_URL" || -z "$TOKEN" || -z "$SERVER_ID" ]]; then
-  echo "Uso: sudo bash install.sh --server-url <URL> --token <TOKEN> --server-id <UUID>"
+  echo "Uso: sudo bash install.sh --server-url <URL> --token <TOKEN> --server-id <UUID> [--insecure]"
   exit 1
 fi
 
 echo "=========================================================="
 echo "Instalando LinuxOps Agent en $(hostname)..."
+echo "Servidor Central: $SERVER_URL"
+echo "Servidor ID: $SERVER_ID"
 echo "=========================================================="
+
+# 0. Instalar dependencias esenciales de sistema si faltan
+if command -v apt-get &>/dev/null; then
+  if ! command -v python3 &>/dev/null || ! python3 -c "import venv" &>/dev/null || ! command -v curl &>/dev/null || ! command -v tar &>/dev/null; then
+    echo "[*] Instalando dependencias base (python3, python3-venv, python3-pip, curl, tar)..."
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y && apt-get install -y python3 python3-venv python3-pip curl tar
+  fi
+elif command -v dnf &>/dev/null; then
+  if ! command -v python3 &>/dev/null || ! command -v curl &>/dev/null || ! command -v tar &>/dev/null; then
+    echo "[*] Instalando dependencias base con dnf..."
+    dnf install -y python3 python3-pip curl tar
+  fi
+elif command -v yum &>/dev/null; then
+  if ! command -v python3 &>/dev/null || ! command -v curl &>/dev/null || ! command -v tar &>/dev/null; then
+    echo "[*] Instalando dependencias base con yum..."
+    yum install -y python3 python3-pip curl tar
+  fi
+fi
 
 # 1. Crear usuario y grupo de servicio no privilegiados
 if ! id "linuxops-agent" &>/dev/null; then
+  echo "[*] Creando usuario de sistema 'linuxops-agent'..."
   useradd --system --shell /usr/sbin/nologin --user-group linuxops-agent
 fi
 
@@ -57,30 +84,53 @@ DATA_DIR="/var/lib/linuxops-agent"
 LOG_DIR="/var/log/linuxops-agent"
 
 mkdir -p "$INSTALL_DIR" "$CONFIG_DIR/certs" "$DATA_DIR" "$LOG_DIR"
-chown -R linuxops-agent:linuxops-agent "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
+chown -R linuxops-agent:linuxops-agent "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$INSTALL_DIR"
 chmod 750 "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
 
-# 3. Copiar código fuente del agente
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cp -r "$SCRIPT_DIR/linuxops_agent" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/packaging/enroll.py" "$INSTALL_DIR/"
+# 3. Descargar y extraer el paquete del agente desde el Servidor Central
+echo "[*] Descargando componentes del agente..."
+CURL_OPTS=("-sSL")
+if [[ "$INSECURE" == "1" ]]; then
+  CURL_OPTS+=("-k")
+fi
 
-# 4. Crear entorno virtual Python
+BUNDLE_URL="${SERVER_URL%/}/agent-bundle.tar.gz"
+TMP_TAR=$(mktemp /tmp/linuxops-agent-XXXXXX.tar.gz)
+
+# Intentar descargar el bundle
+if ! curl "${CURL_OPTS[@]}" "$BUNDLE_URL" -o "$TMP_TAR"; then
+  # Fallback a /api/v1/agents/bundle.tar.gz
+  BUNDLE_URL="${SERVER_URL%/}/api/v1/agents/bundle.tar.gz"
+  curl "${CURL_OPTS[@]}" "$BUNDLE_URL" -o "$TMP_TAR"
+fi
+
+tar -xzf "$TMP_TAR" -C "$INSTALL_DIR"
+rm -f "$TMP_TAR"
+chown -R linuxops-agent:linuxops-agent "$INSTALL_DIR"
+
+# 4. Crear entorno virtual Python e instalar requerimientos
+echo "[*] Creando entorno virtual Python..."
 python3 -m venv "$INSTALL_DIR/venv"
-"$INSTALL_DIR/venv/bin/pip" install --upgrade pip
-"$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt"
+"$INSTALL_DIR/venv/bin/pip" install --upgrade pip --quiet
+"$INSTALL_DIR/venv/bin/pip" install -r "$INSTALL_DIR/requirements.txt" --quiet
 
 # 5. Ejecutar incorporación segura y obtención de certificados mTLS
-echo "Iniciando incorporación segura..."
-PYTHONPATH="$INSTALL_DIR" "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/enroll.py" \
-  --server-url "$SERVER_URL" \
-  --token "$TOKEN" \
-  --server-id "$SERVER_ID" \
-  --cert-dir "$CONFIG_DIR/certs"
+echo "[*] Negociando credenciales mTLS y registrando agente..."
+ENROLL_ARGS=(
+  "--server-url" "$SERVER_URL"
+  "--token" "$TOKEN"
+  "--server-id" "$SERVER_ID"
+  "--cert-dir" "$CONFIG_DIR/certs"
+)
+if [[ "$INSECURE" == "1" ]]; then
+  ENROLL_ARGS+=("--insecure")
+fi
+
+PYTHONPATH="$INSTALL_DIR" "$INSTALL_DIR/venv/bin/python" "$INSTALL_DIR/packaging/enroll.py" "${ENROLL_ARGS[@]}"
 
 chown -R linuxops-agent:linuxops-agent "$CONFIG_DIR/certs"
 chmod 600 "$CONFIG_DIR/certs/agent.key"
+chmod 644 "$CONFIG_DIR/certs/agent.crt" "$CONFIG_DIR/certs/ca.crt"
 
 # 6. Escribir archivo de variables de entorno
 cat <<EOF > "$CONFIG_DIR/agent.env"
@@ -94,19 +144,18 @@ EOF
 chmod 600 "$CONFIG_DIR/agent.env"
 chown linuxops-agent:linuxops-agent "$CONFIG_DIR/agent.env"
 
-# 7. Configurar sudoers restrictivo solo para systemctl sin password
+# 7. Configurar sudoers restrictivo solo para systemctl y journalctl sin password
 cat <<EOF > /etc/sudoers.d/linuxops-agent
-linuxops-agent ALL=(ALL) NOPASSWD: /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *, /usr/bin/systemctl reload *, /usr/bin/systemctl show *, /usr/bin/systemctl status *
+linuxops-agent ALL=(ALL) NOPASSWD: /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *, /usr/bin/systemctl reload *, /usr/bin/systemctl show *, /usr/bin/systemctl status *, /usr/bin/journalctl *
 EOF
 chmod 440 /etc/sudoers.d/linuxops-agent
 
 # 8. Instalar y arrancar servicio systemd
-cp "$SCRIPT_DIR/packaging/linuxops-agent.service" /etc/systemd/system/
+cp "$INSTALL_DIR/packaging/linuxops-agent.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now linuxops-agent
 
 echo "=========================================================="
 echo "LinuxOps Agent instalado y activo correctamente."
-echo "Estado: $(systemctl is-active linuxops-agent)"
+echo "Estado del servicio: $(systemctl is-active linuxops-agent)"
 echo "=========================================================="
-
