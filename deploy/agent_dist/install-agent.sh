@@ -41,6 +41,12 @@ if [[ -z "$SERVER_URL" || -z "$TOKEN" || -z "$SERVER_ID" ]]; then
   exit 1
 fi
 
+# Sanitizar SERVER_URL (remover /install-agent.sh o barras finales si fueron pegadas por error)
+SERVER_URL="${SERVER_URL%/}"
+SERVER_URL="${SERVER_URL%/install-agent.sh}"
+SERVER_URL="${SERVER_URL%/install.sh}"
+SERVER_URL="${SERVER_URL%/}"
+
 # Detectar Hostname del servidor
 DETECTED_HOSTNAME=$(hostname -f 2>/dev/null || hostname 2>/dev/null || uname -n)
 
@@ -117,10 +123,10 @@ if [[ -n "$SCRIPT_DIR" && -d "$SCRIPT_DIR/linuxops_agent" ]]; then
   cp "$SCRIPT_DIR/packaging/enroll.py" "$INSTALL_DIR/packaging/"
   cp "$SCRIPT_DIR/packaging/linuxops-agent.service" /etc/systemd/system/
 else
-  CLEAN_URL="${SERVER_URL%/}"
+  CLEAN_URL="${SERVER_URL}"
   BUNDLE_URL="${CLEAN_URL}/agent-bundle.tar.gz"
   echo "[*] Descargando paquete del agente desde $BUNDLE_URL..."
-  CURL_OPTS=("-sSL")
+  CURL_OPTS=("-sSLf")
   if [[ "$INSECURE" == "1" ]]; then
     CURL_OPTS+=("-k")
   fi
@@ -128,7 +134,21 @@ else
   TMP_TAR=$(mktemp /tmp/linuxops-agent-XXXXXX.tar.gz)
   if ! curl "${CURL_OPTS[@]}" "$BUNDLE_URL" -o "$TMP_TAR"; then
     BUNDLE_URL="${CLEAN_URL}/api/v1/agents/bundle.tar.gz"
-    curl "${CURL_OPTS[@]}" "$BUNDLE_URL" -o "$TMP_TAR"
+    echo "[*] Reintentando descarga desde $BUNDLE_URL..."
+    if ! curl "${CURL_OPTS[@]}" "$BUNDLE_URL" -o "$TMP_TAR"; then
+      echo "[!] Error: No se pudo descargar el paquete del agente desde $CLEAN_URL." >&2
+      echo "[!] Verifique que el servidor central esté accesible y la URL sea correcta." >&2
+      rm -f "$TMP_TAR"
+      exit 1
+    fi
+  fi
+
+  if ! tar -tzf "$TMP_TAR" >/dev/null 2>&1; then
+    echo "[!] Error: El archivo recibido desde $BUNDLE_URL no es un paquete comprimido válido (tar.gz)." >&2
+    echo "[!] Contenido de la respuesta recibida:" >&2
+    head -n 5 "$TMP_TAR" >&2
+    rm -f "$TMP_TAR"
+    exit 1
   fi
 
   tar -xzf "$TMP_TAR" -C "$INSTALL_DIR"

@@ -30,6 +30,21 @@ from app.services.agent_gateway import agent_gateway
 router = APIRouter(prefix="/servers", tags=["Servidores"])
 
 
+def get_effective_base_url(request: Request) -> str:
+    """
+    Obtiene la URL base adecuada para comandos de instalación.
+    Si settings.APP_URL está explícitamente configurada y no es 'linuxops.local', se respeta.
+    De lo contrario, detecta el protocolo y host del cliente (incluyendo encabezados de proxy inverso).
+    """
+    if settings.APP_URL and "linuxops.local" not in settings.APP_URL:
+        return settings.APP_URL.rstrip("/")
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+    if host:
+        return f"{proto}://{host}".rstrip("/")
+    return str(request.base_url).rstrip("/")
+
+
 def calculate_server_live_status(server: Server) -> str:
     """
     Calcula el estado real del servidor según el último heartbeat recibido.
@@ -206,9 +221,10 @@ async def create_server_and_init_enrollment(
         details={"server_name": server.name},
     )
 
+    app_base_url = get_effective_base_url(request)
     install_cmd = (
-        f"curl -sSL {settings.APP_URL}/install-agent.sh | sudo bash -s -- "
-        f"--server-url {settings.APP_URL} --token {raw_enrollment_token} --server-id {server.id}"
+        f"curl -sSL {app_base_url}/install-agent.sh | sudo bash -s -- "
+        f"--server-url {app_base_url} --token {raw_enrollment_token} --server-id {server.id}"
     )
 
     return EnrollmentInitResponse(
@@ -378,9 +394,10 @@ async def reissue_enrollment_token(
         details={"server_name": server.name, "expires_at": expires_at.isoformat()},
     )
 
+    app_base_url = get_effective_base_url(request)
     install_cmd = (
-        f"curl -sSL {settings.APP_URL}/install-agent.sh | sudo bash -s -- "
-        f"--server-url {settings.APP_URL} --token {raw_enrollment_token} --server-id {server.id}"
+        f"curl -sSL {app_base_url}/install-agent.sh | sudo bash -s -- "
+        f"--server-url {app_base_url} --token {raw_enrollment_token} --server-id {server.id}"
     )
 
     return EnrollmentInitResponse(
