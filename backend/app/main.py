@@ -287,7 +287,9 @@ app.include_router(alerts_router, prefix=api_prefix)
 app.include_router(dashboard_router, prefix=api_prefix)
 app.include_router(settings_router, prefix=api_prefix)
 
-# Registrar Routers WebSockets
+# Registrar Routers WebSockets (compatibles con /api/v1/ws/... y /ws/...)
 app.include_router(ws_agent_router, prefix=api_prefix)
 app.include_router(ws_terminal_router, prefix=api_prefix)
+app.include_router(ws_agent_router)
+app.include_router(ws_terminal_router)
 

@@ -19,23 +19,42 @@ logger = logging.getLogger("linuxops.ws.agent")
 router = APIRouter(prefix="/ws", tags=["WebSocket"])
 
 
+@router.get("/agent/{server_id}")
+async def agent_ws_probe(server_id: str):
+    """Endpoint de sondeo HTTP para verificar enrutamiento antes de upgrade a WebSocket."""
+    return {
+        "status": "ready",
+        "service": "LinuxOps Agent WebSocket Gateway",
+        "server_id": server_id,
+        "upgrade_required": True,
+        "message": "Este endpoint requiere conexión WebSocket (wss://) con cabeceras Upgrade: websocket.",
+    }
+
+
 @router.websocket("/agent/{server_id}")
-async def agent_websocket_endpoint(websocket: WebSocket, server_id: UUID):
+async def agent_websocket_endpoint(websocket: WebSocket, server_id: str):
     await websocket.accept()
 
+    try:
+        parsed_server_id = UUID(server_id)
+    except (ValueError, AttributeError):
+        logger.warning(f"Rechazada conexión WS con ID de servidor inválido: {server_id}")
+        await websocket.close(code=1008, reason="ID de servidor inválido")
+        return
+
     async with AsyncSessionLocal() as db:
-        server = await db.get(Server, server_id)
+        server = await db.get(Server, parsed_server_id)
         if not server:
-            logger.warning(f"Rechazada conexión WS de servidor inexistente: {server_id}")
+            logger.warning(f"Rechazada conexión WS de servidor inexistente: {parsed_server_id}")
             await websocket.close(code=1008, reason="Servidor no registrado")
             return
 
-        agent_stmt = select(Agent).where(Agent.server_id == server_id)
+        agent_stmt = select(Agent).where(Agent.server_id == parsed_server_id)
         agent_res = await db.execute(agent_stmt)
         agent = agent_res.scalar_one_or_none()
 
         if not agent or agent.is_revoked:
-            logger.warning(f"Rechazada conexión WS de agente revocado o no registrado: {server_id}")
+            logger.warning(f"Rechazada conexión WS de agente revocado o no registrado: {parsed_server_id}")
             await websocket.close(code=1008, reason="Agente no registrado o revocado")
             return
 
@@ -50,7 +69,7 @@ async def agent_websocket_endpoint(websocket: WebSocket, server_id: UUID):
         server.last_heartbeat_at = datetime.datetime.utcnow()
         await db.commit()
 
-    agent_gateway.register_agent(server_id, websocket)
+    agent_gateway.register_agent(parsed_server_id, websocket)
 
     try:
         while True:
