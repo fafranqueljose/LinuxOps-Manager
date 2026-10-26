@@ -85,7 +85,9 @@ class RequestValidator:
         except Exception:
             return False, "Formato inválido de fecha en 'expires_at'."
 
-        if expires_at < now:
+        # Margen de tolerancia de reloj (Clock Skew Leeway) de 5 minutos entre servidores distribuidos
+        clock_skew_leeway = datetime.timedelta(minutes=5)
+        if (expires_at + clock_skew_leeway) < now:
             return False, f"La solicitud ha caducado (expiró en {expires_at.isoformat()}, hora actual {now.isoformat()})."
 
         # 4. Operación permitida

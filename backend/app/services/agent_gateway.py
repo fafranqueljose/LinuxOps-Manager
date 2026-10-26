@@ -56,7 +56,8 @@ class AgentGateway:
 
         request_id = str(uuid4())
         now = datetime.datetime.now(datetime.timezone.utc)
-        expires_at = now + datetime.timedelta(seconds=timeout_seconds)
+        # Margen de validez en el sobre para evitar rechazos por desincronización de reloj
+        expires_at = now + datetime.timedelta(seconds=max(timeout_seconds + 60, 120))
 
         envelope = {
             "protocol_version": "1.0",
