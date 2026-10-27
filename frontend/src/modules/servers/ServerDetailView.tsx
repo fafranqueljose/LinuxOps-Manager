@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { ServerDetail } from '@/types';
 import { Header } from '@/components/layout/Header';
 import { formatBytes, formatUptime, formatDate } from '@/lib/utils';
-import { ContainersTab } from '@/modules/docker/ContainersTab';
+import { DockerView } from '@/modules/docker/DockerView';
 import { ServicesTab } from '@/modules/systemd/ServicesTab';
 import { WebTerminal } from '@/modules/terminal/WebTerminal';
 import {
@@ -216,7 +216,7 @@ export const ServerDetailView: React.FC = () => {
             }`}
           >
             <Box className="h-4 w-4" />
-            <span>Contenedores Docker ({server.container_count})</span>
+            <span>Ecosistema Docker ({server.container_count})</span>
           </button>
 
           <button
@@ -258,7 +258,7 @@ export const ServerDetailView: React.FC = () => {
 
         {/* Contenido de la Pestaña Activa */}
         <div>
-          {activeTab === 'docker' && <ContainersTab serverId={server.id} />}
+          {activeTab === 'docker' && <DockerView serverId={server.id} />}
           {activeTab === 'systemd' && <ServicesTab serverId={server.id} />}
           {activeTab === 'terminal' && <WebTerminal serverId={server.id} />}
           {activeTab === 'details' && (

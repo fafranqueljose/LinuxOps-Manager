@@ -187,13 +187,19 @@ async def list_images(
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado.")
 
+    if not agent_gateway.is_agent_connected(server.id):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El agente del servidor remoto no está conectado en este momento.",
+        )
+
     try:
         res = await agent_gateway.send_agent_request(
             server_id=server.id,
             module="docker",
             operation="image.list",
             payload={},
-            timeout_seconds=20,
+            timeout_seconds=25,
         )
         if not res.get("success"):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=res.get("error"))
@@ -212,13 +218,19 @@ async def list_networks(
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado.")
 
+    if not agent_gateway.is_agent_connected(server.id):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El agente del servidor remoto no está conectado en este momento.",
+        )
+
     try:
         res = await agent_gateway.send_agent_request(
             server_id=server.id,
             module="docker",
             operation="network.list",
             payload={},
-            timeout_seconds=20,
+            timeout_seconds=25,
         )
         if not res.get("success"):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=res.get("error"))
@@ -237,13 +249,19 @@ async def list_volumes(
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado.")
 
+    if not agent_gateway.is_agent_connected(server.id):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El agente del servidor remoto no está conectado en este momento.",
+        )
+
     try:
         res = await agent_gateway.send_agent_request(
             server_id=server.id,
             module="docker",
             operation="volume.list",
             payload={},
-            timeout_seconds=20,
+            timeout_seconds=25,
         )
         if not res.get("success"):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=res.get("error"))

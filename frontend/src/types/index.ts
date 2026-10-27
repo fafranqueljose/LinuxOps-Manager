@@ -1,4 +1,4 @@
-export interface User {
+﻿export interface User {
   id: string;
   username: string;
   email: string;
@@ -93,6 +93,32 @@ export interface Container {
   ports: ContainerPort[];
   compose_project?: string;
   compose_service?: string;
+}
+
+export interface DockerImage {
+  id: string;
+  tags: string[];
+  size_bytes: number;
+  created: number;
+  in_use: boolean;
+  containers_count?: number;
+}
+
+export interface DockerNetwork {
+  id: string;
+  name: string;
+  driver: string;
+  scope: string;
+  internal: boolean;
+  containers: Record<string, any>;
+}
+
+export interface DockerVolume {
+  name: string;
+  driver: string;
+  mountpoint: string;
+  in_use: boolean;
+  containers: string[];
 }
 
 export interface SystemdUnit {
