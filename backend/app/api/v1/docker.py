@@ -48,7 +48,7 @@ async def list_containers(
             module="docker",
             operation="container.list",
             payload={"all": all},
-            timeout_seconds=20,
+            timeout_seconds=25,
         )
         if not res.get("success"):
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=res.get("error"))
@@ -68,13 +68,19 @@ async def inspect_container(
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado.")
 
+    if not agent_gateway.is_agent_connected(server.id):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El agente del servidor remoto no está conectado en este momento.",
+        )
+
     try:
         res = await agent_gateway.send_agent_request(
             server_id=server.id,
             module="docker",
             operation="container.inspect",
             payload={"container_id": container_id},
-            timeout_seconds=20,
+            timeout_seconds=25,
         )
         if not res.get("success"):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=res.get("error"))
@@ -95,6 +101,12 @@ async def execute_container_action(
     server = await db.get(Server, server_id)
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado.")
+
+    if not agent_gateway.is_agent_connected(server.id):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El agente del servidor remoto no está conectado en este momento.",
+        )
 
     correlation_id = str(uuid4())
     client_ip = request.client.host if request.client else "unknown"
@@ -162,6 +174,12 @@ async def get_container_logs(
     if not server:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Servidor no encontrado.")
 
+    if not agent_gateway.is_agent_connected(server.id):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="El agente del servidor remoto no está conectado en este momento.",
+        )
+
     try:
         res = await agent_gateway.send_agent_request(
             server_id=server.id,
@@ -190,7 +208,7 @@ async def list_images(
     if not agent_gateway.is_agent_connected(server.id):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="El agente del servidor remoto no est� conectado en este momento.",
+            detail="El agente del servidor remoto no está conectado en este momento.",
         )
 
     try:
@@ -221,7 +239,7 @@ async def list_networks(
     if not agent_gateway.is_agent_connected(server.id):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="El agente del servidor remoto no est� conectado en este momento.",
+            detail="El agente del servidor remoto no está conectado en este momento.",
         )
 
     try:
@@ -252,7 +270,7 @@ async def list_volumes(
     if not agent_gateway.is_agent_connected(server.id):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="El agente del servidor remoto no est� conectado en este momento.",
+            detail="El agente del servidor remoto no está conectado en este momento.",
         )
 
     try:
