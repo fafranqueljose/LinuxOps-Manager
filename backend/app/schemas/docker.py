@@ -2,7 +2,7 @@
 LinuxOps Manager — Esquemas de Docker Engine
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -20,7 +20,7 @@ class ContainerOut(BaseModel):
     image_id: str
     state: str  # running, exited, paused, restarting
     status: str
-    created: int
+    created: Union[int, str] = 0
     ports: List[ContainerPort] = []
     compose_project: Optional[str] = None
     compose_service: Optional[str] = None
@@ -48,7 +48,7 @@ class ImageOut(BaseModel):
     id: str
     tags: List[str]
     size_bytes: int
-    created: int
+    created: Union[int, str] = 0
     in_use: bool = False
     containers_count: int = 0
 

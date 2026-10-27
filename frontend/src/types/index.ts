@@ -1,4 +1,4 @@
-﻿export interface User {
+export interface User {
   id: string;
   username: string;
   email: string;
@@ -89,7 +89,7 @@ export interface Container {
   image_id: string;
   state: string;
   status: string;
-  created: number;
+  created: number | string;
   ports: ContainerPort[];
   compose_project?: string;
   compose_service?: string;
@@ -99,7 +99,7 @@ export interface DockerImage {
   id: string;
   tags: string[];
   size_bytes: number;
-  created: number;
+  created: number | string;
   in_use: boolean;
   containers_count?: number;
 }
