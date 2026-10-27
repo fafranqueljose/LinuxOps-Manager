@@ -9,10 +9,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_permission, require_superuser
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.models.role import Role, UserRole
 from app.models.user import User
-from app.schemas.user import UserCreate, UserOut, UserUpdate
+from app.schemas.user import (
+    AdminResetPasswordRequest,
+    ChangePasswordRequest,
+    UserCreate,
+    UserOut,
+    UserUpdate,
+)
 from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/users", tags=["Usuarios"])
@@ -115,6 +121,89 @@ async def create_user(
     )
 
 
+@router.post("/me/change-password")
+async def change_own_password(
+    req: ChangePasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Permite al usuario autenticado modificar su propia contraseña
+    proveyendo la contraseña actual y la nueva.
+    """
+    if not verify_password(req.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La contraseña actual ingresada es incorrecta.",
+        )
+
+    if req.current_password == req.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La nueva contraseña debe ser diferente a la contraseña actual.",
+        )
+
+    current_user.hashed_password = hash_password(req.new_password)
+    await db.flush()
+
+    correlation_id = str(uuid4())
+    client_ip = request.client.host if request.client else "unknown"
+    await AuditService.log_event(
+        db=db,
+        correlation_id=correlation_id,
+        operation="users.change_own_password",
+        resource_type="user",
+        resource_id=str(current_user.id),
+        status="success",
+        user_id=current_user.id,
+        username=current_user.username,
+        client_ip=client_ip,
+        details={"message": "Contraseña de usuario modificada exitosamente"},
+    )
+
+    return {"status": "success", "message": "Tu contraseña ha sido actualizada correctamente."}
+
+
+@router.post("/{user_id}/reset-password")
+async def admin_reset_user_password(
+    user_id: UUID,
+    req: AdminResetPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("users:manage")),
+):
+    """
+    Permite al administrador restablecer la contraseña de cualquier usuario.
+    """
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+
+    target.hashed_password = hash_password(req.new_password)
+    await db.flush()
+
+    correlation_id = str(uuid4())
+    client_ip = request.client.host if request.client else "unknown"
+    await AuditService.log_event(
+        db=db,
+        correlation_id=correlation_id,
+        operation="users.reset_password",
+        resource_type="user",
+        resource_id=str(target.id),
+        status="success",
+        user_id=current_user.id,
+        username=current_user.username,
+        client_ip=client_ip,
+        details={"target_username": target.username, "reset_by": current_user.username},
+    )
+
+    return {
+        "status": "success",
+        "message": f"Contraseña del usuario '{target.username}' restablecida con éxito.",
+    }
+
+
 @router.put("/{user_id}", response_model=UserOut)
 async def update_user(
     user_id: UUID,
@@ -132,7 +221,7 @@ async def update_user(
     if req.full_name is not None:
         target.full_name = req.full_name
     if req.is_active is not None:
-        # Prevenir auto-desactivación del superadmin
+        # Prevenir auto-desactivación de la propia cuenta
         if target.id == current_user.id and not req.is_active:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -146,7 +235,7 @@ async def update_user(
         existing_roles = (await db.execute(del_stmt)).scalars().all()
         for ur in existing_roles:
             await db.delete(ur)
-        
+
         for r_id in req.role_ids:
             role = await db.get(Role, r_id)
             if role:
@@ -185,3 +274,45 @@ async def update_user(
         created_at=target.created_at,
     )
 
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_permission("users:manage")),
+):
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+
+    if target.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No puede eliminar su propia cuenta de usuario.",
+        )
+
+    # Eliminar roles asociados
+    del_stmt = select(UserRole).where(UserRole.user_id == target.id)
+    existing_roles = (await db.execute(del_stmt)).scalars().all()
+    for ur in existing_roles:
+        await db.delete(ur)
+
+    correlation_id = str(uuid4())
+    client_ip = request.client.host if request.client else "unknown"
+    await AuditService.log_event(
+        db=db,
+        correlation_id=correlation_id,
+        operation="users.delete",
+        resource_type="user",
+        resource_id=str(target.id),
+        status="success",
+        user_id=current_user.id,
+        username=current_user.username,
+        client_ip=client_ip,
+        details={"deleted_username": target.username},
+    )
+
+    await db.delete(target)
+    await db.flush()
+    return None

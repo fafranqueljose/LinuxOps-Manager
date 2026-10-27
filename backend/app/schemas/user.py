@@ -46,7 +46,7 @@ class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=64)
     email: EmailStr
     full_name: Optional[str] = None
-    password: str = Field(..., min_length=10)
+    password: str = Field(..., min_length=8)
     role_ids: List[UUID] = []
 
 
@@ -55,6 +55,15 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
     role_ids: Optional[List[UUID]] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
+
+class AdminResetPasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=8)
 
 
 class UserOut(BaseModel):
@@ -70,4 +79,3 @@ class UserOut(BaseModel):
 
     class Config:
         from_attributes = True
-

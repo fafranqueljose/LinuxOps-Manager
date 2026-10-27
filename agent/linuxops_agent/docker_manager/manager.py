@@ -1,7 +1,7 @@
-"""
-LinuxOps Agent — Gestor de Docker Engine
-Interactúa directamente con la API de Docker Engine mediante docker-py.
-Aplica ofuscación estricta de variables de entorno sensibles.
+﻿"""
+LinuxOps Agent â€” Gestor de Docker Engine
+InteractÃºa directamente con la API de Docker Engine mediante docker-py.
+Aplica ofuscaciÃ³n estricta de variables de entorno sensibles.
 """
 
 import logging
@@ -86,7 +86,7 @@ class DockerManager:
                         "type": p_type,
                     })
 
-            # Obtener image_id de forma segura sin disparar excepción 404 si la imagen fue borrada
+            # Obtener image_id de forma segura sin disparar excepciÃ³n 404 si la imagen fue borrada
             image_id = attrs.get("Image", "")
             if not image_id:
                 try:
@@ -158,7 +158,7 @@ class DockerManager:
         elif action == "unpause":
             c.unpause()
         else:
-            raise ValueError(f"Acción no soportada: {action}")
+            raise ValueError(f"AcciÃ³n no soportada: {action}")
 
     def get_container_logs(self, container_id: str, tail: int = 200, timestamps: bool = True) -> str:
         client = self._get_client()
@@ -191,19 +191,46 @@ class DockerManager:
     def list_networks(self) -> List[Dict[str, Any]]:
         client = self._get_client()
         networks = client.networks.list()
+        containers = client.containers.list(all=True)
+
+        # Mapear contenedores conectados por red desde NetworkSettings
+        net_containers_map: Dict[str, Dict[str, Any]] = {}
+        for c in containers:
+            c_name = c.attrs.get("Name", "").lstrip("/")
+            c_id = c.id
+            c_nets = c.attrs.get("NetworkSettings", {}).get("Networks", {}) or {}
+            for n_name, n_info in c_nets.items():
+                entry = {
+                    "Name": c_name,
+                    "EndpointID": n_info.get("EndpointID", ""),
+                    "MacAddress": n_info.get("MacAddress", ""),
+                    "IPv4Address": n_info.get("IPAddress", ""),
+                    "GlobalIPv6Address": n_info.get("GlobalIPv6Address", ""),
+                }
+                net_containers_map.setdefault(n_name, {})[c_id] = entry
+                net_id = n_info.get("NetworkID")
+                if net_id:
+                    net_containers_map.setdefault(net_id, {})[c_id] = entry
+
         result = []
         for net in networks:
             attrs = net.attrs
+            # Combinar datos de la red con lo detectado en los contenedores
+            attached = dict(attrs.get("Containers") or {})
+            if net.name in net_containers_map:
+                attached.update(net_containers_map[net.name])
+            if net.id in net_containers_map:
+                attached.update(net_containers_map[net.id])
+
             result.append({
                 "id": net.id,
                 "name": net.name,
                 "driver": attrs.get("Driver", ""),
                 "scope": attrs.get("Scope", ""),
                 "internal": attrs.get("Internal", False),
-                "containers": attrs.get("Containers", {}),
+                "containers": attached,
             })
         return result
-
     def list_volumes(self) -> List[Dict[str, Any]]:
         client = self._get_client()
         volumes = client.volumes.list()
