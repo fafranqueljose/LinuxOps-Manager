@@ -1,4 +1,4 @@
-﻿"""
+"""
 LinuxOps Agent — Demonio Principal del Agente Linux
 Establece conexión saliente persistente hacia el backend central,
 reporta latidos y métricas periódicas, y procesa solicitudes autorizadas.
@@ -16,6 +16,7 @@ import websockets
 
 from linuxops_agent.config import config
 from linuxops_agent.collectors.system_collector import system_collector
+from linuxops_agent.collectors.storage_collector import storage_collector
 from linuxops_agent.docker_manager.manager import docker_manager
 from linuxops_agent.systemd_manager.manager import systemd_manager
 from linuxops_agent.security.request_validator import request_validator
@@ -236,6 +237,9 @@ class AgentDaemon:
         elif module == "system":
             if operation == "info":
                 return system_collector.get_static_os_info()
+        elif module == "storage":
+            if operation == "overview":
+                return storage_collector.get_storage_overview()
 
         raise NotImplementedError(f"Operación no implementada: {module}.{operation}")
 

@@ -8,6 +8,7 @@ import { formatBytes, formatUptime, formatDate } from '@/lib/utils';
 import { DockerView } from '@/modules/docker/DockerView';
 import { ServicesTab } from '@/modules/systemd/ServicesTab';
 import { WebTerminal } from '@/modules/terminal/WebTerminal';
+import { StorageTab } from '@/modules/storage/StorageTab';
 import {
   Server,
   Cpu,
@@ -31,7 +32,7 @@ export const ServerDetailView: React.FC = () => {
   const { serverId } = useParams<{ serverId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'docker' | 'systemd' | 'terminal' | 'details'>('docker');
+  const [activeTab, setActiveTab] = useState<'docker' | 'systemd' | 'storage' | 'terminal' | 'details'>('docker');
   const [enrollmentData, setEnrollmentData] = useState<{ install_command: string; token: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -232,6 +233,18 @@ export const ServerDetailView: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('storage')}
+            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
+              activeTab === 'storage'
+                ? 'border-brand-500 text-brand-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <HardDrive className="h-4 w-4" />
+            <span>Almacenamiento</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('terminal')}
             className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
               activeTab === 'terminal'
@@ -260,6 +273,7 @@ export const ServerDetailView: React.FC = () => {
         <div>
           {activeTab === 'docker' && <DockerView serverId={server.id} />}
           {activeTab === 'systemd' && <ServicesTab serverId={server.id} />}
+          {activeTab === 'storage' && <StorageTab serverId={server.id} />}
           {activeTab === 'terminal' && <WebTerminal serverId={server.id} />}
           {activeTab === 'details' && (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 max-w-2xl text-xs">

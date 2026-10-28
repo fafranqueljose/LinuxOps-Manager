@@ -30,6 +30,7 @@ ALLOWED_OPERATIONS = {
     "systemd.unit.reload",
     "systemd.unit.journal",
     "system.info",
+    "storage.overview",
 }
 
 # Validación estricta para nombres de servicio systemd: alfanumérico con @ _ . - terminando en .service

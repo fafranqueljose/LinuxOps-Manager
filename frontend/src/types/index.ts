@@ -169,4 +169,57 @@ export interface TerminalSessionOut {
   duration_seconds: number;
 }
 
+export interface StorageCapacity {
+  total_bytes: number;
+  used_bytes: number;
+  available_bytes: number;
+  free_bytes: number;
+  usage_percent: number;
+}
+
+export interface UserMount {
+  name: string;
+  target: string;
+  source: string;
+  fstype: string;
+  type: 'nfs' | 'cifs' | 'disk' | 'other' | string;
+  type_label: string;
+  status: 'mounted' | 'unmounted' | 'not_available' | 'error' | string;
+  is_read_only: boolean;
+  access_mode: 'rw' | 'ro' | string;
+  credentials_file?: string | null;
+  permissions?: Record<string, string> | null;
+  options?: string;
+  capacity?: StorageCapacity | null;
+  error_message?: string | null;
+}
+
+export interface SystemFilesystem {
+  name: string;
+  mount_point: string;
+  device: string;
+  fstype: string;
+  total_bytes: number;
+  used_bytes: number;
+  available_bytes: number;
+  free_bytes: number;
+  usage_percent: number;
+  is_root: boolean;
+}
+
+export interface DirectoryTreeNode {
+  name: string;
+  path: string;
+  is_mount_point: boolean;
+  device_type: 'root_filesystem' | 'filesystem' | 'directory' | 'virtual_fs' | string;
+  capacity?: StorageCapacity | null;
+  children: DirectoryTreeNode[];
+}
+
+export interface StorageOverview {
+  user_mounts: UserMount[];
+  system_filesystems: SystemFilesystem[];
+  directory_tree: DirectoryTreeNode;
+}
+
 
