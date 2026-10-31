@@ -26,6 +26,7 @@ from app.schemas.server import (
 )
 from app.services.audit_service import AuditService
 from app.services.agent_gateway import agent_gateway
+from app.services.settings_service import SettingsService
 
 router = APIRouter(prefix="/servers", tags=["Servidores"])
 
@@ -221,10 +222,13 @@ async def create_server_and_init_enrollment(
         details={"server_name": server.name},
     )
 
-    app_base_url = get_effective_base_url(request)
+    conn_info = await SettingsService.get_effective_agent_connection(db, request)
+    app_base_url = conn_info["base_url"]
+    insecure_curl = " -k" if conn_info["insecure"] else ""
+    insecure_arg = " --insecure" if conn_info["insecure"] else ""
     install_cmd = (
-        f"curl -sSL {app_base_url}/install-agent.sh | sudo bash -s -- "
-        f"--server-url {app_base_url} --token {raw_enrollment_token} --server-id {server.id}"
+        f"curl -sSL{insecure_curl} {app_base_url}/install-agent.sh | sudo bash -s -- "
+        f"--server-url {app_base_url} --token {raw_enrollment_token} --server-id {server.id}{insecure_arg}"
     )
 
     return EnrollmentInitResponse(
@@ -394,10 +398,13 @@ async def reissue_enrollment_token(
         details={"server_name": server.name, "expires_at": expires_at.isoformat()},
     )
 
-    app_base_url = get_effective_base_url(request)
+    conn_info = await SettingsService.get_effective_agent_connection(db, request)
+    app_base_url = conn_info["base_url"]
+    insecure_curl = " -k" if conn_info["insecure"] else ""
+    insecure_arg = " --insecure" if conn_info["insecure"] else ""
     install_cmd = (
-        f"curl -sSL {app_base_url}/install-agent.sh | sudo bash -s -- "
-        f"--server-url {app_base_url} --token {raw_enrollment_token} --server-id {server.id}"
+        f"curl -sSL{insecure_curl} {app_base_url}/install-agent.sh | sudo bash -s -- "
+        f"--server-url {app_base_url} --token {raw_enrollment_token} --server-id {server.id}{insecure_arg}"
     )
 
     return EnrollmentInitResponse(

@@ -222,4 +222,22 @@ export interface StorageOverview {
   directory_tree: DirectoryTreeNode;
 }
 
+export interface SystemSetting {
+  key: string;
+  value: any;
+  description?: string;
+  is_read_only: boolean;
+  updated_at: string;
+}
+
+export interface AgentConnectionPreview {
+  base_url: string;
+  dns: string;
+  port?: number | null;
+  protocol: string;
+  insecure: boolean;
+  sample_install_command: string;
+  download_url: string;
+}
+
 

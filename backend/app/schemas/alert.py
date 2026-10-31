@@ -40,4 +40,19 @@ class SystemSettingOut(BaseModel):
 
 class SystemSettingUpdate(BaseModel):
     value: Any
+    description: Optional[str] = None
+
+
+class SystemSettingsBatchUpdate(BaseModel):
+    settings: dict[str, Any]
+
+
+class AgentConnectionPreviewOut(BaseModel):
+    base_url: str
+    dns: str
+    port: Optional[int] = None
+    protocol: str
+    insecure: bool = False
+    sample_install_command: str
+    download_url: str
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { ServerDetail } from '@/types';
@@ -32,7 +32,12 @@ export const ServerDetailView: React.FC = () => {
   const { serverId } = useParams<{ serverId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'docker' | 'systemd' | 'storage' | 'terminal' | 'details'>('docker');
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') as any;
+  const validTabs = ['docker', 'systemd', 'storage', 'terminal', 'details'];
+  const [activeTab, setActiveTab] = useState<'docker' | 'systemd' | 'storage' | 'terminal' | 'details'>(
+    validTabs.includes(tabParam) ? tabParam : 'docker'
+  );
   const [enrollmentData, setEnrollmentData] = useState<{ install_command: string; token: string } | null>(null);
   const [copied, setCopied] = useState(false);
 

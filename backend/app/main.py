@@ -146,6 +146,26 @@ async def seed_initial_data():
             logger.warning("POR FAVOR CAMBIE ESTA CONTRASEÑA EN SU PRIMER INICIO DE SESIÓN")
             logger.warning("=================================================================")
 
+        # 4. Parámetros de configuración del sistema predeterminados
+        from app.models.alert import SystemSetting
+        default_settings = [
+            ("server_dns", "", "Nombre de dominio DNS o IP pública del servidor central (ej: lnxops.crcltd.com.do)", False),
+            ("server_port", 443, "Puerto externo del servidor central (ej: 443, 8443, 80)", False),
+            ("server_protocol", "https", "Protocolo de acceso externo (https o http)", False),
+            ("agent_insecure_tls", False, "Omitir verificación estricta de TLS en el script de instalación (--insecure)", False),
+            ("agent_heartbeat_timeout_seconds", 45, "Umbral de Heartbeat de agentes en segundos antes de considerarlo offline", False),
+            ("agent_degraded_threshold_seconds", 90, "Umbral en segundos para considerar un agente en estado degradado", False),
+            ("agent_enrollment_expire_minutes", 30, "Tiempo de expiración del token de instalación de agentes (minutos)", False),
+            ("session_expire_minutes", 480, "Caducidad de la sesión web de usuarios en minutos (8 horas)", False),
+            ("terminal_idle_timeout_seconds", 600, "Tiempo de inactividad antes de cerrar sesiones de terminal (segundos)", False),
+            ("rate_limit_per_minute", 120, "Límite de peticiones por minuto por dirección IP", False),
+        ]
+        for key, val, desc, ro in default_settings:
+            s_res = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
+            if not s_res.scalar_one_or_none():
+                db.add(SystemSetting(key=key, value=val, description=desc, is_read_only=ro))
+        await db.flush()
+
         await db.commit()
 
 
