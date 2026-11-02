@@ -448,26 +448,37 @@ export const DashboardView: React.FC = () => {
                           <p className="text-slate-400 text-[10px] pb-1 font-sans">
                             Servidores con unidades en estado <code className="text-red-400">failed</code>:
                           </p>
-                          {serversWithFailedServices.map((s) => (
-                            <Link
-                              key={s.id}
-                              to={`/servers/${s.id}?tab=systemd`}
-                              className="flex items-center justify-between p-2 rounded-lg bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 transition-colors group"
-                            >
-                              <div className="truncate">
-                                <span className="font-bold text-slate-200 group-hover:text-red-400 block truncate">
-                                  {s.name}
-                                </span>
-                                <span className="text-[10px] text-red-400 font-semibold">
-                                  {s.failed_services_count} servicio{s.failed_services_count !== 1 ? 's' : ''} caído{s.failed_services_count !== 1 ? 's' : ''}
-                                </span>
-                              </div>
-
-                              <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 text-[10px] font-bold shrink-0">
-                                Reparar →
-                              </span>
-                            </Link>
-                          ))}
+                          {serversWithFailedServices.map((s) => {
+                            const failedList: string[] = (s.tags as any)?.failed_services || [];
+                            return (
+                              <Link
+                                key={s.id}
+                                to={`/servers/${s.id}?tab=systemd&state=failed`}
+                                className="p-2.5 rounded-xl bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 transition-colors group block space-y-1.5"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold text-slate-200 group-hover:text-red-400">
+                                    {s.name}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 text-[10px] font-bold">
+                                    {s.failed_services_count} caído{s.failed_services_count !== 1 ? 's' : ''} →
+                                  </span>
+                                </div>
+                                {failedList.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {failedList.map((unitName: string) => (
+                                      <span
+                                        key={unitName}
+                                        className="px-1.5 py-0.5 rounded bg-red-950/80 border border-red-500/40 text-red-300 font-mono text-[10px]"
+                                      >
+                                        {unitName}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </Link>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

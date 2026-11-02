@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
+from app.models.alert import Alert
 from app.models.metric import ServerMetric
 from app.models.server import Agent, ConnectivityEvent, Server
 from app.services.agent_gateway import agent_gateway
@@ -106,6 +107,44 @@ async def agent_websocket_endpoint(websocket: WebSocket, server_id: str):
                         s.load_15 = metrics_data.get("load_15", s.load_15)
                         s.container_count = metrics_data.get("container_count", s.container_count)
                         s.failed_services_count = metrics_data.get("failed_services_count", s.failed_services_count)
+                        failed_list = metrics_data.get("failed_services_list", [])
+
+                        tags = dict(s.tags or {})
+                        if failed_list:
+                            tags["failed_services"] = failed_list
+                        elif "failed_services" in tags and s.failed_services_count == 0:
+                            tags.pop("failed_services", None)
+                        s.tags = tags
+
+                        # Gestión proactiva de alertas para unidades caídas
+                        if s.failed_services_count > 0 and failed_list:
+                            existing_alert = await db.execute(
+                                select(Alert).where(
+                                    Alert.server_id == server_id,
+                                    Alert.is_resolved.is_(False),
+                                    Alert.title.like("%Servicio systemd fallido%"),
+                                )
+                            )
+                            if not existing_alert.scalar_one_or_none():
+                                alert = Alert(
+                                    server_id=server_id,
+                                    severity="warning",
+                                    title=f"Servicio systemd fallido en {s.name}",
+                                    message=f"Se detectaron unidades en estado fallido: {', '.join(failed_list)}. Requiere intervención.",
+                                    is_resolved=False,
+                                )
+                                db.add(alert)
+                        elif s.failed_services_count == 0:
+                            prev_alerts = await db.execute(
+                                select(Alert).where(
+                                    Alert.server_id == server_id,
+                                    Alert.is_resolved.is_(False),
+                                    Alert.title.like("%Servicio systemd fallido%"),
+                                )
+                            )
+                            for a in prev_alerts.scalars().all():
+                                a.is_resolved = True
+                                a.resolved_at = now
 
                         # Guardar métrica histórica
                         metric_entry = ServerMetric(

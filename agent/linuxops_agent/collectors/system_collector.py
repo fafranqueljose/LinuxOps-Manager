@@ -97,7 +97,7 @@ class SystemCollector:
                 pass
 
         # 5. Contenedores y servicios fallidos
-        failed_services = SystemCollector._count_failed_services()
+        failed_count, failed_list = SystemCollector._get_failed_services_info()
 
         return {
             "hostname": SystemCollector.get_hostname(),
@@ -114,12 +114,13 @@ class SystemCollector:
             "load_1": round(load_1, 2),
             "load_5": round(load_5, 2),
             "load_15": round(load_15, 2),
-            "failed_services_count": failed_services,
+            "failed_services_count": failed_count,
+            "failed_services_list": failed_list,
         }
 
     @staticmethod
-    def _count_failed_services() -> int:
-        """Cuenta unidades systemd en estado fallido."""
+    def _get_failed_services_info():
+        """Obtiene la cantidad y nombres de unidades systemd en estado fallido."""
         try:
             res = subprocess.run(
                 ["systemctl", "list-units", "--state=failed", "--no-legend", "--no-pager"],
@@ -129,11 +130,21 @@ class SystemCollector:
                 shell=False,
             )
             if res.returncode == 0:
-                lines = [line.strip() for line in res.stdout.splitlines() if line.strip()]
-                return len(lines)
+                failed_units = []
+                for line in res.stdout.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    parts = line.split(maxsplit=4)
+                    if parts and parts[0]:
+                        unit_name = parts[0]
+                        # Limpiar posible prefijo '●'
+                        unit_name = unit_name.lstrip("●").strip()
+                        failed_units.append(unit_name)
+                return len(failed_units), failed_units
         except Exception:
             pass
-        return 0
+        return 0, []
 
 
 system_collector = SystemCollector()

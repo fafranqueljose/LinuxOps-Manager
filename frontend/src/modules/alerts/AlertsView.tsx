@@ -1,10 +1,11 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Alert } from '@/types';
 import { Header } from '@/components/layout/Header';
 import { formatDate } from '@/lib/utils';
-import { Bell, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Bell, AlertTriangle, CheckCircle2, ShieldAlert, ArrowUpRight, Check } from 'lucide-react';
 
 export const AlertsView: React.FC = () => {
   const queryClient = useQueryClient();
@@ -69,14 +70,28 @@ export const AlertsView: React.FC = () => {
                   <p className="text-[10px] text-slate-500 font-mono">{formatDate(a.created_at)}</p>
                 </div>
 
-                {!a.is_resolved && (
-                  <button
-                    onClick={() => resolveMutation.mutate(a.id)}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors"
-                  >
-                    Resolver
-                  </button>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  {a.server_id && (
+                    <Link
+                      to={`/servers/${a.server_id}?tab=systemd&state=failed`}
+                      className="px-3 py-1.5 bg-brand-600/10 hover:bg-brand-600/20 text-brand-400 border border-brand-500/20 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+                    >
+                      <span>Ver Servicio</span>
+                      <ArrowUpRight className="h-3 w-3" />
+                    </Link>
+                  )}
+
+                  {!a.is_resolved && (
+                    <button
+                      onClick={() => resolveMutation.mutate(a.id)}
+                      disabled={resolveMutation.isPending}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1"
+                    >
+                      <Check className="h-3 w-3 text-emerald-400" />
+                      <span>Resolver</span>
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
