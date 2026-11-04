@@ -10,7 +10,7 @@ Loki se ejecuta en modo **monolítico autónomo** (`SingleProcess`) dentro del a
     image: grafana/loki:3.0.0
     container_name: linuxops-loki
     restart: unless-stopped
-    command: -config.file=/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml -config.expand-env=true
     volumes:
       - ./loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
@@ -36,8 +36,8 @@ Loki se ejecuta en modo **monolítico autónomo** (`SingleProcess`) dentro del a
   Obliga a incluir la cabecera `X-Scope-OrgID: linuxops` en todas las peticiones internas realizadas por el backend FastAPI, garantizando estricta segregación e indexación.
 - **Esquema de Almacenamiento (TSDB v13)**:
   - Motor de índices: `tsdb` (Time Series Database optimizado para Loki 3.x).
-  - Almacén de chunks: sistema de archivos local persistente (`/loki/chunks`).
-  - Período de indexación: fragmentos diarios de 24 horas.
+  - Almacén de chunks: sistema de archivos local persistente configurado en `common.storage.filesystem` (`/loki/chunks`).
+  - Período de indexación: fragmentos diarios de 24 horas con prefijo `index_`.
 - **Retención y Compactación**:
   - `compactor.retention_enabled: true`
   - Período de retención predeterminado: 336 horas (14 días).
@@ -59,4 +59,3 @@ curl -i http://loki:3100/ready
 # HTTP/1.1 200 OK
 # ready
 ```
-

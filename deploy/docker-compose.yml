@@ -26,7 +26,7 @@ services:
     image: grafana/loki:3.0.0
     container_name: linuxops-loki
     restart: unless-stopped
-    command: -config.file=/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml -config.expand-env=true
     volumes:
       - ./loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
