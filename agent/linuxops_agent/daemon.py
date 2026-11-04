@@ -88,9 +88,13 @@ class AgentDaemon:
         while self.running:
             try:
                 await asyncio.to_thread(self.log_collector.collect_docker_logs)
+            except Exception as e:
+                logger.warning(f"Error recolectando logs de Docker: {e}")
+
+            try:
                 await asyncio.to_thread(self.log_collector.collect_systemd_logs)
             except Exception as e:
-                logger.debug(f"Error durante recolección de logs locales: {e}")
+                logger.warning(f"Error recolectando logs de systemd: {e}")
 
             await asyncio.sleep(config.LOG_COLLECT_INTERVAL)
 

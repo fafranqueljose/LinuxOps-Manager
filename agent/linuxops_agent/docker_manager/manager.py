@@ -1,7 +1,7 @@
-﻿"""
-LinuxOps Agent â€” Gestor de Docker Engine
-InteractÃºa directamente con la API de Docker Engine mediante docker-py.
-Aplica ofuscaciÃ³n estricta de variables de entorno sensibles.
+"""
+LinuxOps Agent — Gestor de Docker Engine
+Interactúa directamente con la API de Docker Engine mediante docker-py.
+Aplica ofuscación estricta de variables de entorno sensibles.
 """
 
 import logging
@@ -41,6 +41,9 @@ class DockerManager:
             self._client = docker.from_env(timeout=15)
         return self._client
 
+    def get_client(self) -> docker.DockerClient:
+        return self._get_client()
+
     def is_docker_available(self) -> bool:
         try:
             client = self._get_client()
@@ -57,7 +60,7 @@ class DockerManager:
         for c in containers:
             attrs = c.attrs
             labels = attrs.get("Config", {}).get("Labels", {}) or {}
-            
+
             # Detectar si pertenece a un proyecto Docker Compose
             compose_project = labels.get("com.docker.compose.project")
             compose_service = labels.get("com.docker.compose.service")
@@ -86,7 +89,7 @@ class DockerManager:
                         "type": p_type,
                     })
 
-            # Obtener image_id de forma segura sin disparar excepciÃ³n 404 si la imagen fue borrada
+            # Obtener image_id de forma segura sin disparar excepción 404 si la imagen fue borrada
             image_id = attrs.get("Image", "")
             if not image_id:
                 try:
@@ -158,7 +161,7 @@ class DockerManager:
         elif action == "unpause":
             c.unpause()
         else:
-            raise ValueError(f"AcciÃ³n no soportada: {action}")
+            raise ValueError(f"Acción no soportada: {action}")
 
     def get_container_logs(self, container_id: str, tail: int = 200, timestamps: bool = True) -> str:
         client = self._get_client()
@@ -231,6 +234,7 @@ class DockerManager:
                 "containers": attached,
             })
         return result
+
     def list_volumes(self) -> List[Dict[str, Any]]:
         client = self._get_client()
         volumes = client.volumes.list()
@@ -259,4 +263,3 @@ class DockerManager:
 
 
 docker_manager = DockerManager()
-
