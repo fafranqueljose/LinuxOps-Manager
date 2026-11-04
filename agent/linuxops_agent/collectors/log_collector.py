@@ -64,13 +64,11 @@ class LogCollector:
             since_param = None
             if last_cursor:
                 try:
-                    # Convertir a epoch float o int
                     since_param = int(float(last_cursor)) + 1
                 except Exception:
                     since_param = None
 
             try:
-                # Docker SDK container.logs() con timestamps=True
                 raw_logs = container.logs(
                     stdout=True,
                     stderr=True,
@@ -91,7 +89,6 @@ class LogCollector:
                     if not line:
                         continue
 
-                    # Docker prefija cada línea con timestamp RFC3339Nano (ej: 2026-11-04T12:00:00.123456789Z)
                     parts = line.split(" ", 1)
                     if len(parts) == 2 and ("T" in parts[0] and "Z" in parts[0]):
                         ts_str = parts[0]
@@ -100,7 +97,6 @@ class LogCollector:
                         ts_str = datetime.datetime.utcnow().isoformat() + "Z"
                         msg_str = line
 
-                    # Parsear timestamp a epoch para checkpoint
                     try:
                         clean_ts = ts_str.rstrip("Z")
                         if "." in clean_ts:
@@ -148,9 +144,16 @@ class LogCollector:
         """
         total_collected = 0
 
-        # Si no se especifican unidades, inspeccionar los principales servicios del sistema
+        # Si no se especifican unidades, recolectar de servicios activos y principales
         if not monitored_units:
-            monitored_units = [
+            monitored_units = []
+            try:
+                active_units = systemd_manager.list_units(state_filter="active")
+                monitored_units = [u["unit"] for u in active_units if u.get("unit", "").endswith(".service")][:15]
+            except Exception as e:
+                logger.debug(f"No se pudieron listar unidades activas: {e}")
+
+            standard_units = [
                 "ssh.service",
                 "sshd.service",
                 "docker.service",
@@ -159,6 +162,9 @@ class LogCollector:
                 "cron.service",
                 "crond.service",
             ]
+            for u in standard_units:
+                if u not in monitored_units:
+                    monitored_units.append(u)
 
         for unit in monitored_units:
             checkpoint_key = f"systemd_{unit}"
@@ -170,7 +176,6 @@ class LogCollector:
             else:
                 cmd.extend(["-n", str(max_lines_per_unit)])
 
-            # Intentar ejecutar directamente o con sudo si no es root
             exec_cmd = cmd
             if hasattr(subprocess, "run"):
                 try:
@@ -215,7 +220,6 @@ class LogCollector:
                     if not raw_msg or not isinstance(raw_msg, str):
                         continue
 
-                    # Timestamp en microsegundos (__REALTIME_TIMESTAMP)
                     rt_ts = entry.get("__REALTIME_TIMESTAMP")
                     if rt_ts:
                         epoch_val = float(rt_ts) / 1000000.0
@@ -226,7 +230,6 @@ class LogCollector:
                     else:
                         ts_str = datetime.datetime.utcnow().isoformat() + "Z"
 
-                    # Mapear prioridad numérica de syslog (0=emerg, 3=err, 4=warning, 6=info, 7=debug)
                     prio = str(entry.get("PRIORITY", "6"))
                     if prio in ("0", "1", "2"):
                         lvl = "critical"
@@ -263,8 +266,6 @@ class LogCollector:
                     total_collected += len(batch_records)
 
                 if latest_epoch:
-                    # Guardar checkpoint sumando 1 segundo para evitar relectura
                     self.buffer.set_checkpoint("systemd", checkpoint_key, str(int(latest_epoch) + 1))
 
         return total_collected
-

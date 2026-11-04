@@ -67,37 +67,33 @@ class LokiService:
     ) -> int:
         """
         Agrupa los registros por etiquetas de flujo (stream labels) y los empuja a Loki.
-        Sanitiza secretos antes de enviar.
+        Sanitiza secretos y garantiza timestamps estrictamente ascendentes.
         """
         if not records:
             return 0
 
-        # Agrupar streams por clave de labels para cumplir con el protocolo de Loki
-        streams_map: Dict[Tuple[str, str, str, str, str], List[Tuple[str, str]]] = {}
+        streams_map: Dict[Tuple[str, str, str, str, str, str], List[Tuple[int, str]]] = {}
 
         for rec in records:
-            # Sanitizar mensaje y metadatos
             clean_message = sanitize_log_message(rec.message)
             clean_meta = sanitize_log_metadata(rec.metadata or {})
 
-            # Normalizar campos para etiquetas de Loki
             source = str(rec.source or "unknown").strip().lower()
             service = str(rec.service or "generic").strip()
             level = str(rec.level or "info").strip().lower()
             stream = str(rec.stream or "stdout").strip().lower()
             s_name = server_name.strip() if server_name else str(server_id)
+            s_id = str(server_id).lower()
 
-            key = (str(server_id), s_name, source, service, level, stream)
+            key = (s_id, s_name, source, service, level, stream)
             if key not in streams_map:
                 streams_map[key] = []
 
-            # Timestamp en nanosegundos
             ts = rec.timestamp
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=datetime.timezone.utc)
-            nanos_str = str(int(ts.timestamp() * 1e9))
+            nanos_int = int(ts.timestamp() * 1e9)
 
-            # Si hay metadatos, los incluimos como JSON estructurado en el cuerpo del registro
             if clean_meta:
                 payload_entry = {
                     "msg": clean_message,
@@ -107,13 +103,20 @@ class LokiService:
             else:
                 log_line = clean_message
 
-            streams_map[key].append((nanos_str, log_line))
+            streams_map[key].append((nanos_int, log_line))
 
-        # Construir cuerpo de solicitud Loki push
         loki_streams = []
         for (sid, sname, src, svc, lvl, strm), values in streams_map.items():
-            # Ordenar valores por timestamp ascendente (requerido por Loki)
-            values.sort(key=lambda x: int(x[0]))
+            # Ordenar valores por timestamp ascendente y asegurar monotonía estricta
+            values.sort(key=lambda x: x[0])
+            unique_values = []
+            last_ts = 0
+            for ts_int, line in values:
+                if ts_int <= last_ts:
+                    ts_int = last_ts + 1
+                last_ts = ts_int
+                unique_values.append([str(ts_int), line])
+
             loki_streams.append({
                 "stream": {
                     "server_id": sid,
@@ -123,7 +126,7 @@ class LokiService:
                     "level": lvl,
                     "stream": strm,
                 },
-                "values": [[ts, line] for ts, line in values],
+                "values": unique_values,
             })
 
         push_payload = {"streams": loki_streams}
@@ -139,6 +142,7 @@ class LokiService:
                 logger.error(err_msg)
                 raise RuntimeError(err_msg)
 
+        logger.info(f"Loki push exitoso: {len(records)} registros guardados para servidor {server_id} ({server_name})")
         return len(records)
 
     async def query_range(
@@ -155,19 +159,16 @@ class LokiService:
     ) -> Tuple[List[LogRecordOut], float, str]:
         """
         Ejecuta una consulta LogQL estructurada contra el endpoint /loki/api/v1/query_range.
-        Construye selectores de forma segura previniendo inyección de LogQL.
         """
         start_t = time.time()
-
-        # Construir selectores de stream de Loki
         selectors: List[str] = []
 
         if server_ids:
             if len(server_ids) == 1:
-                clean_id = str(server_ids[0]).replace('"', "")
+                clean_id = str(server_ids[0]).lower().replace('"', "")
                 selectors.append(f'server_id="{clean_id}"')
             else:
-                regex_ids = "|".join(str(s).replace('"', "") for s in server_ids)
+                regex_ids = "|".join(str(s).lower().replace('"', "") for s in server_ids)
                 selectors.append(f'server_id=~"{regex_ids}"')
 
         if source and source.strip() and source.strip().lower() != "all":
@@ -182,20 +183,16 @@ class LokiService:
             clean_lvl = level.strip().lower().replace('"', "")
             selectors.append(f'level="{clean_lvl}"')
 
-        # Selector base requerido por Loki
         if selectors:
             stream_selector = "{" + ", ".join(selectors) + "}"
         else:
-            stream_selector = '{source=~".+"}'
+            stream_selector = '{server_id=~".+"}'
 
-        # Filtro de texto seguro (line filter)
         logql = stream_selector
         if search and search.strip():
-            # Escapar comillas dobles y barras invertidas
             clean_search = search.strip().replace('\\', '\\\\').replace('"', '\\"')
             logql += f' |= "{clean_search}"'
 
-        # Parámetros de tiempo
         params: Dict[str, Any] = {
             "query": logql,
             "limit": min(limit, 2000),
@@ -250,7 +247,6 @@ class LokiService:
 
                         meta_dict = None
                         msg_text = raw_line
-                        # Intentar parsear si el mensaje fue serializado con metadatos
                         if raw_line.startswith('{"msg":'):
                             try:
                                 parsed_json = json.loads(raw_line)
@@ -261,7 +257,7 @@ class LokiService:
 
                         records.append(
                             LogRecordOut(
-                                id=f"{sid}_{ts_nanos}_{hash(msg_text) & 0xffffffff}",
+                                id=f"{sid}_{ts_nanos}_{abs(hash(msg_text)) & 0xffffffff}",
                                 timestamp=dt,
                                 server_id=parsed_sid,
                                 server_name=sname,
@@ -278,13 +274,13 @@ class LokiService:
             logger.error(f"Error consultando Loki: {e}")
             loki_status = "unavailable"
 
-        # Ordenar registros globalmente según la dirección solicitada
         records.sort(
             key=lambda r: r.timestamp,
             reverse=(params["direction"] == "BACKWARD"),
         )
 
         duration_ms = (time.time() - start_t) * 1000
+        logger.info(f"Loki query ({logql}): {len(records)} registros retornados en {duration_ms:.1f}ms")
         return records[:limit], duration_ms, loki_status
 
     async def get_label_values(self, label_name: str) -> List[str]:
@@ -304,4 +300,3 @@ class LokiService:
 
 
 loki_service = LokiService()
-
