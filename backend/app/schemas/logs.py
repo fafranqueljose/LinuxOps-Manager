@@ -3,9 +3,10 @@ LinuxOps Manager — Esquemas Pydantic para Logs Centralizados
 """
 
 import datetime
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class LogEventIn(BaseModel):
@@ -17,12 +18,46 @@ class LogEventIn(BaseModel):
     stream: Optional[str] = Field(default="stdout", description="stdout, stderr, journal")
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
+    @field_validator("timestamp", mode="before")
+    def parse_flexible_timestamp(cls, v: Any) -> datetime.datetime:
+        if isinstance(v, datetime.datetime):
+            return v
+        if isinstance(v, (int, float)):
+            # Timestamp unix epoch
+            return datetime.datetime.fromtimestamp(v, tz=datetime.timezone.utc)
+        if isinstance(v, str):
+            clean = v.strip()
+            # Truncar nanosegundos (más de 6 dígitos después del punto) a microsegundos
+            clean = re.sub(r"(\.\d{6})\d+", r"\1", clean)
+            if clean.endswith("Z"):
+                clean = clean[:-1] + "+00:00"
+            try:
+                return datetime.datetime.fromisoformat(clean)
+            except Exception:
+                pass
+        return datetime.datetime.utcnow()
+
 
 class LogBatchIngestIn(BaseModel):
     server_id: UUID = Field(..., description="ID del servidor emisor")
     batch_id: str = Field(..., description="UUID único del lote para idempotencia")
-    sent_at: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    sent_at: Optional[datetime.datetime] = Field(default_factory=datetime.datetime.utcnow)
     records: List[LogEventIn] = Field(..., description="Lista de registros de log")
+
+    @field_validator("sent_at", mode="before")
+    def parse_sent_at(cls, v: Any) -> datetime.datetime:
+        if isinstance(v, datetime.datetime):
+            return v
+        if isinstance(v, str):
+            clean = v.strip()
+            clean = re.sub(r"(\.\d{6})\d+", r"\1", clean)
+            if clean.endswith("Z"):
+                clean = clean[:-1] + "+00:00"
+            try:
+                return datetime.datetime.fromisoformat(clean)
+            except Exception:
+                pass
+        return datetime.datetime.utcnow()
 
 
 class LogBatchIngestOut(BaseModel):
@@ -78,4 +113,3 @@ class LogHealthStatus(BaseModel):
     loki_url: str
     tenant_id: str
     details: Optional[str] = None
-

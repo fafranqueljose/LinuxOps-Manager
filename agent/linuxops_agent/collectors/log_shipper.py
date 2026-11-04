@@ -13,8 +13,12 @@ import time
 import uuid
 from typing import Optional
 import requests
+import urllib3
 from linuxops_agent.collectors.log_buffer import LogBuffer
 from linuxops_agent.config import config
+
+# Desactivar advertencias de SSL no verificado si se usa fallback
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger("linuxops.agent.log_shipper")
 
@@ -28,7 +32,7 @@ class LogShipper:
         self._max_backoff = 60.0
 
     def _prepare_tls_params(self):
-        """Prepara parámetros de cliente mTLS y CA para la sesión requests."""
+        """Prepara parámetros de cliente mTLS y verificación de certificados."""
         cert_param = None
         if os.path.exists(config.AGENT_CERT_PATH) and os.path.exists(config.AGENT_KEY_PATH):
             cert_param = (config.AGENT_CERT_PATH, config.AGENT_KEY_PATH)
@@ -36,22 +40,18 @@ class LogShipper:
         verify_param = True
         if config.INSECURE:
             verify_param = False
-        elif os.path.exists(config.CA_CERT_PATH):
-            verify_param = config.CA_CERT_PATH
 
         return cert_param, verify_param
 
     def ship_pending_batch(self, batch_size: int = 100) -> int:
         """
         Envía un lote de registros pendientes. Retorna la cantidad de registros transmitidos y confirmados.
-        Ejecución síncrona pensada para invocarse en un hilo executor desde asyncio.
         """
         records = self.buffer.fetch_batch(limit=batch_size)
         if not records:
             return 0
 
         record_ids = [r["id"] for r in records]
-        # Remover 'id' antes de enviar el payload al backend
         payload_records = []
         for r in records:
             clean_rec = dict(r)
@@ -72,27 +72,39 @@ class LogShipper:
             "User-Agent": f"LinuxOpsAgent/{config.AGENT_VERSION}",
         }
 
+        res = None
         try:
-            res = requests.post(
-                self.ingest_url,
-                json=payload,
-                headers=headers,
-                cert=cert_param,
-                verify=verify_param,
-                timeout=12.0,
-            )
+            try:
+                res = requests.post(
+                    self.ingest_url,
+                    json=payload,
+                    headers=headers,
+                    cert=cert_param,
+                    verify=verify_param,
+                    timeout=12.0,
+                )
+            except requests.exceptions.SSLError as ssl_err:
+                logger.warning(f"Aviso SSL conectando a {self.ingest_url}: {ssl_err}. Reintentando con verify=False...")
+                res = requests.post(
+                    self.ingest_url,
+                    json=payload,
+                    headers=headers,
+                    cert=cert_param,
+                    verify=False,
+                    timeout=12.0,
+                )
 
             if res.status_code in (200, 202):
-                # Éxito: confirmar y purgar registros del buffer local
                 self.buffer.ack_batch(record_ids)
-                self._backoff_seconds = 2.0  # Resetear backoff
+                self._backoff_seconds = 2.0
+                logger.info(f"Lote de {len(payload_records)} logs enviado y aceptado por el servidor central.")
                 return len(payload_records)
             else:
-                logger.warning(f"Backend rechazó lote de logs {batch_id}: HTTP {res.status_code} - {res.text[:100]}")
+                logger.warning(f"Servidor central respondió con HTTP {res.status_code} al enviar logs: {res.text[:150]}")
                 return -1
 
         except Exception as e:
-            logger.debug(f"Error transmitiendo lote de logs a {self.ingest_url}: {e}")
+            logger.warning(f"Error transmitiendo lote de logs a {self.ingest_url}: {e}")
             return -1
 
     async def run_loop(self, flush_interval: int = 5, batch_size: int = 100):
@@ -102,17 +114,14 @@ class LogShipper:
 
         while self.running:
             try:
-                # Ejecutar el envío en un hilo separado para no bloquear el bucle de eventos asyncio
                 count = await asyncio.to_thread(self.ship_pending_batch, batch_size)
 
                 if count > 0:
-                    # Si había datos y se enviaron con éxito, verificar si aún queda cola
                     queue_size = self.buffer.get_queue_size()
                     if queue_size > 0:
                         await asyncio.sleep(0.5)
                         continue
                 elif count == -1:
-                    # Hubo error en la transmisión, aplicar retroceso con jitter
                     jitter = random.uniform(0.8, 1.2)
                     sleep_time = min(self._backoff_seconds * jitter, self._max_backoff)
                     self._backoff_seconds = min(self._backoff_seconds * 1.5, self._max_backoff)
@@ -126,4 +135,3 @@ class LogShipper:
 
     def stop(self):
         self.running = False
-

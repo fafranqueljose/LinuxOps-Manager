@@ -97,12 +97,15 @@ class LogCollector:
                         ts_str = datetime.datetime.utcnow().isoformat() + "Z"
                         msg_str = line
 
+                    # Truncar nanosegundos (máximo 6 dígitos tras el punto)
+                    if "." in ts_str:
+                        ts_str = re.sub(r"(\.\d{6})\d+", r"\1", ts_str)
+
                     try:
                         clean_ts = ts_str.rstrip("Z")
-                        if "." in clean_ts:
-                            dt = datetime.datetime.fromisoformat(clean_ts[:26])
-                        else:
-                            dt = datetime.datetime.fromisoformat(clean_ts)
+                        if clean_ts.endswith("+00:00"):
+                            clean_ts = clean_ts[:-6]
+                        dt = datetime.datetime.fromisoformat(clean_ts)
                         epoch_val = dt.timestamp()
                         if latest_ts_epoch is None or epoch_val > latest_ts_epoch:
                             latest_ts_epoch = epoch_val
@@ -128,6 +131,7 @@ class LogCollector:
                 if batch_records:
                     self.buffer.enqueue_records(batch_records)
                     total_collected += len(batch_records)
+                    logger.info(f"Recolectados {len(batch_records)} logs del contenedor {c_name}")
 
                 if latest_ts_epoch:
                     self.buffer.set_checkpoint("docker", checkpoint_key, str(latest_ts_epoch))
@@ -230,6 +234,10 @@ class LogCollector:
                     else:
                         ts_str = datetime.datetime.utcnow().isoformat() + "Z"
 
+                    # Truncar nanosegundos si existen
+                    if "." in ts_str:
+                        ts_str = re.sub(r"(\.\d{6})\d+", r"\1", ts_str)
+
                     prio = str(entry.get("PRIORITY", "6"))
                     if prio in ("0", "1", "2"):
                         lvl = "critical"
@@ -264,6 +272,7 @@ class LogCollector:
                 if batch_records:
                     self.buffer.enqueue_records(batch_records)
                     total_collected += len(batch_records)
+                    logger.info(f"Recolectados {len(batch_records)} logs de la unidad {unit}")
 
                 if latest_epoch:
                     self.buffer.set_checkpoint("systemd", checkpoint_key, str(int(latest_epoch) + 1))
