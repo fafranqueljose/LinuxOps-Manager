@@ -12,21 +12,29 @@ class AgentConfig:
     SERVER_ID: str = os.getenv("LINUXOPS_SERVER_ID", "")
     DATA_DIR: str = os.getenv("LINUXOPS_DATA_DIR", "/var/lib/linuxops-agent")
     CONFIG_DIR: str = os.getenv("LINUXOPS_CONFIG_DIR", "/etc/linuxops-agent")
-    
+
     # Rutas de Certificados mTLS
     CA_CERT_PATH: str = os.getenv("LINUXOPS_CA_CERT", "/etc/linuxops-agent/certs/ca.crt")
     AGENT_CERT_PATH: str = os.getenv("LINUXOPS_AGENT_CERT", "/etc/linuxops-agent/certs/agent.crt")
     AGENT_KEY_PATH: str = os.getenv("LINUXOPS_AGENT_KEY", "/etc/linuxops-agent/certs/agent.key")
     INSECURE: bool = os.getenv("LINUXOPS_INSECURE", "false").lower() in ("true", "1", "yes")
-    
+
     # Intervalos y Timeouts
     HEARTBEAT_INTERVAL_SECONDS: int = int(os.getenv("LINUXOPS_HEARTBEAT_INTERVAL", "15"))
     RECONNECT_DELAY_SECONDS: int = int(os.getenv("LINUXOPS_RECONNECT_DELAY", "5"))
     REQUEST_TTL_SECONDS: int = 45
-    
+
     # Usuario sin privilegios para sesiones PTY de terminal
     PTY_DEFAULT_USER: str = os.getenv("LINUXOPS_PTY_USER", "linuxops-pty")
     AGENT_VERSION: str = "1.0.0"
+
+    # Módulo de Recolección y Buffer Centralizado de Logs
+    LOGS_ENABLED: bool = os.getenv("LINUXOPS_LOGS_ENABLED", "true").lower() in ("true", "1", "yes")
+    LOG_BUFFER_PATH: str = os.getenv("LINUXOPS_LOG_BUFFER_PATH", os.path.join(DATA_DIR, "log_buffer.db"))
+    LOG_BATCH_SIZE: int = int(os.getenv("LINUXOPS_LOG_BATCH_SIZE", "100"))
+    LOG_FLUSH_INTERVAL: int = int(os.getenv("LINUXOPS_LOG_FLUSH_INTERVAL", "5"))
+    LOG_COLLECT_INTERVAL: int = int(os.getenv("LINUXOPS_LOG_COLLECT_INTERVAL", "10"))
+    LOG_MAX_BUFFER_MB: int = int(os.getenv("LINUXOPS_LOG_MAX_BUFFER_MB", "256"))
 
     @property
     def ws_url(self) -> str:
@@ -35,4 +43,3 @@ class AgentConfig:
 
 
 config = AgentConfig()
-

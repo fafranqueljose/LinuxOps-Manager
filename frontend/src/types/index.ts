@@ -240,4 +240,53 @@ export interface AgentConnectionPreview {
   download_url: string;
 }
 
+// ==========================================
+// Módulo de Logs Centralizados (Loki)
+// ==========================================
+export interface LogRecord {
+  id: string;
+  timestamp: string;
+  server_id: string;
+  server_name?: string;
+  source: 'docker' | 'systemd' | 'syslog' | string;
+  service: string;
+  level: 'debug' | 'info' | 'notice' | 'warning' | 'error' | 'critical' | string;
+  stream?: string;
+  message: string;
+  metadata?: Record<string, any> | null;
+}
 
+export interface LogQueryResult {
+  total: number;
+  records: LogRecord[];
+  query_duration_ms: number;
+  loki_status: string;
+}
+
+export interface LogSourceItem {
+  server_id: string;
+  server_name: string;
+  sources: string[];
+  containers: string[];
+  services: string[];
+}
+
+export interface LogHealthStatus {
+  status: string;
+  loki_ready: boolean;
+  loki_url: string;
+  tenant_id: string;
+  details?: string;
+}
+
+export interface LogFilterParams {
+  server_id?: string;
+  source?: string;
+  service?: string;
+  level?: string;
+  search?: string;
+  start_time?: string;
+  end_time?: string;
+  limit?: number;
+  direction?: 'BACKWARD' | 'FORWARD';
+}

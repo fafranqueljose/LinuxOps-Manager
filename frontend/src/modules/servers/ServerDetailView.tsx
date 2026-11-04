@@ -9,6 +9,7 @@ import { DockerView } from '@/modules/docker/DockerView';
 import { ServicesTab } from '@/modules/systemd/ServicesTab';
 import { WebTerminal } from '@/modules/terminal/WebTerminal';
 import { StorageTab } from '@/modules/storage/StorageTab';
+import { ServerLogsTab } from '@/modules/logs/ServerLogsTab';
 import {
   Server,
   Cpu,
@@ -26,6 +27,7 @@ import {
   Copy,
   Check,
   X,
+  FileText,
 } from 'lucide-react';
 
 export const ServerDetailView: React.FC = () => {
@@ -34,8 +36,8 @@ export const ServerDetailView: React.FC = () => {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') as any;
-  const validTabs = ['docker', 'systemd', 'storage', 'terminal', 'details'];
-  const [activeTab, setActiveTab] = useState<'docker' | 'systemd' | 'storage' | 'terminal' | 'details'>(
+  const validTabs = ['docker', 'systemd', 'storage', 'terminal', 'logs', 'details'];
+  const [activeTab, setActiveTab] = useState<'docker' | 'systemd' | 'storage' | 'terminal' | 'logs' | 'details'>(
     validTabs.includes(tabParam) ? tabParam : 'docker'
   );
   const [enrollmentData, setEnrollmentData] = useState<{ install_command: string; token: string } | null>(null);
@@ -212,10 +214,10 @@ export const ServerDetailView: React.FC = () => {
         </div>
 
         {/* Selector de Pestañas */}
-        <div className="flex border-b border-slate-800 gap-6 text-sm font-semibold">
+        <div className="flex border-b border-slate-800 gap-6 text-sm font-semibold overflow-x-auto">
           <button
             onClick={() => setActiveTab('docker')}
-            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
+            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'docker'
                 ? 'border-brand-500 text-brand-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -227,7 +229,7 @@ export const ServerDetailView: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('systemd')}
-            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
+            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'systemd'
                 ? 'border-brand-500 text-brand-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -239,7 +241,7 @@ export const ServerDetailView: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('storage')}
-            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
+            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'storage'
                 ? 'border-brand-500 text-brand-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -250,8 +252,20 @@ export const ServerDetailView: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('logs')}
+            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === 'logs'
+                ? 'border-brand-500 text-brand-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileText className="h-4 w-4" />
+            <span>Logs Centralizados</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('terminal')}
-            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
+            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'terminal'
                 ? 'border-brand-500 text-brand-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -263,7 +277,7 @@ export const ServerDetailView: React.FC = () => {
 
           <button
             onClick={() => setActiveTab('details')}
-            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors ${
+            className={`pb-3 flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'details'
                 ? 'border-brand-500 text-brand-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -279,6 +293,7 @@ export const ServerDetailView: React.FC = () => {
           {activeTab === 'docker' && <DockerView serverId={server.id} />}
           {activeTab === 'systemd' && <ServicesTab serverId={server.id} />}
           {activeTab === 'storage' && <StorageTab serverId={server.id} />}
+          {activeTab === 'logs' && <ServerLogsTab serverId={server.id} serverName={server.name} />}
           {activeTab === 'terminal' && <WebTerminal serverId={server.id} />}
           {activeTab === 'details' && (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 max-w-2xl text-xs">

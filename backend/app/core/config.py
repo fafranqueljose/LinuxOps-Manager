@@ -96,6 +96,11 @@ class Settings(BaseSettings):
     TERMINAL_IDLE_TIMEOUT_SECONDS: int = 600  # 10 minutos de inactividad
     TERMINAL_MAX_CONCURRENT_SESSIONS_PER_USER: int = 3
 
+    # Configuración de Loki (Observabilidad y Logs Centralizados)
+    LOKI_URL: str = "http://loki:3100"
+    LOKI_TENANT_ID: str = "linuxops"
+    LOKI_TIMEOUT_SECONDS: float = 10.0
+    LOKI_MAX_BATCH_SIZE: int = 1000
+
 
 settings = Settings()
-

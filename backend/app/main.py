@@ -35,6 +35,7 @@ from app.api.v1.alerts import router as alerts_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.storage import router as storage_router
+from app.api.v1.logs import router as logs_router
 
 # Routers WebSockets
 from app.api.ws.agent_ws import router as ws_agent_router
@@ -58,6 +59,9 @@ PERMISSIONS_CATALOG = [
     ("systemd:read", "systemd", "Consultar unidades systemd y ver registros journal"),
     ("systemd:manage", "systemd", "Iniciar, detener, reiniciar y recargar servicios"),
     ("terminal:access", "terminal", "Abrir sesiones pseudoterminal interactivas"),
+    ("logs:read", "logs", "Consultar y filtrar logs centralizados de servidores y contenedores"),
+    ("logs:export", "logs", "Exportar registros de logs en formatos CSV, JSON y TXT"),
+    ("logs:manage", "logs", "Configurar fuentes de logs y políticas de retención"),
     ("users:read", "users", "Consultar usuarios"),
     ("users:manage", "users", "Crear y modificar usuarios"),
     ("roles:read", "roles", "Consultar roles y matriz de permisos"),
@@ -86,14 +90,23 @@ async def seed_initial_data():
                 "docker:read", "docker:manage",
                 "systemd:read", "systemd:manage",
                 "terminal:access", "audit:read",
+                "logs:read", "logs:export", "logs:manage",
             ],
             "operator": [
                 "servers:read", "agents:read",
                 "docker:read", "docker:manage",
                 "systemd:read", "systemd:manage",
+                "logs:read",
             ],
-            "auditor": ["servers:read", "agents:read", "docker:read", "systemd:read", "audit:read", "audit:verify"],
-            "readonly": ["servers:read", "docker:read", "systemd:read"],
+            "auditor": [
+                "servers:read", "agents:read",
+                "docker:read", "systemd:read",
+                "audit:read", "audit:verify",
+                "logs:read", "logs:export",
+            ],
+            "readonly": [
+                "servers:read", "docker:read", "systemd:read", "logs:read",
+            ],
         }
 
         for role_name, perm_codes in system_roles.items():
@@ -308,10 +321,10 @@ app.include_router(alerts_router, prefix=api_prefix)
 app.include_router(dashboard_router, prefix=api_prefix)
 app.include_router(settings_router, prefix=api_prefix)
 app.include_router(storage_router, prefix=api_prefix)
+app.include_router(logs_router, prefix=api_prefix)
 
 # Registrar Routers WebSockets (compatibles con /api/v1/ws/... y /ws/...)
 app.include_router(ws_agent_router, prefix=api_prefix)
 app.include_router(ws_terminal_router, prefix=api_prefix)
 app.include_router(ws_agent_router)
 app.include_router(ws_terminal_router)
-

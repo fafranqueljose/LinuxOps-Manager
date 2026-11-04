@@ -1,7 +1,8 @@
 """
 LinuxOps Agent — Demonio Principal del Agente Linux
 Establece conexión saliente persistente hacia el backend central,
-reporta latidos y métricas periódicas, y procesa solicitudes autorizadas.
+reporta latidos y métricas periódicas, recolecta y envía logs locales,
+y procesa solicitudes autorizadas.
 """
 
 import asyncio
@@ -17,6 +18,9 @@ import websockets
 from linuxops_agent.config import config
 from linuxops_agent.collectors.system_collector import system_collector
 from linuxops_agent.collectors.storage_collector import storage_collector
+from linuxops_agent.collectors.log_buffer import LogBuffer
+from linuxops_agent.collectors.log_collector import LogCollector
+from linuxops_agent.collectors.log_shipper import LogShipper
 from linuxops_agent.docker_manager.manager import docker_manager
 from linuxops_agent.systemd_manager.manager import systemd_manager
 from linuxops_agent.security.request_validator import request_validator
@@ -31,6 +35,14 @@ class AgentDaemon:
         self.running = True
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.terminal_sessions: Dict[str, PTYSession] = {}
+
+        # Módulo de Observabilidad y Gestión Centralizada de Logs
+        self.log_buffer = LogBuffer(
+            db_path=config.LOG_BUFFER_PATH,
+            max_size_mb=config.LOG_MAX_BUFFER_MB,
+        )
+        self.log_collector = LogCollector(buffer=self.log_buffer)
+        self.log_shipper = LogShipper(buffer=self.log_buffer)
 
     def _setup_ssl_context(self) -> Optional[ssl.SSLContext]:
         """Configura el contexto TLS/mTLS con certificados de cliente y confianza de CA."""
@@ -69,11 +81,34 @@ class AgentDaemon:
                 logger.warning(f"No se pudo cargar certificado de cliente mTLS: {e}")
 
         return ctx
+
+    async def _log_collector_loop(self):
+        """Bucle periódico asíncrono para recolectar logs de contenedores Docker y servicios systemd."""
+        logger.info("Módulo recolector de logs centralizados activo.")
+        while self.running:
+            try:
+                await asyncio.to_thread(self.log_collector.collect_docker_logs)
+                await asyncio.to_thread(self.log_collector.collect_systemd_logs)
+            except Exception as e:
+                logger.debug(f"Error durante recolección de logs locales: {e}")
+
+            await asyncio.sleep(config.LOG_COLLECT_INTERVAL)
+
     async def start(self):
         """Bucle principal del agente con reconexión automática tras caídas de red."""
         logger.info(f"Iniciando LinuxOps Agent v{config.AGENT_VERSION} para Servidor ID: {config.SERVER_ID}")
 
         ssl_ctx = self._setup_ssl_context()
+
+        # Iniciar tareas en segundo plano para recolección y envío confiable de logs
+        if config.LOGS_ENABLED and config.SERVER_ID:
+            asyncio.create_task(self._log_collector_loop())
+            asyncio.create_task(
+                self.log_shipper.run_loop(
+                    flush_interval=config.LOG_FLUSH_INTERVAL,
+                    batch_size=config.LOG_BATCH_SIZE,
+                )
+            )
 
         while self.running:
             try:
@@ -111,6 +146,12 @@ class AgentDaemon:
                         metrics["container_count"] = len(containers)
                     except Exception:
                         metrics["container_count"] = 0
+
+                # Incluir tamaño de la cola pendiente de logs en el reporte
+                try:
+                    metrics["log_queue_pending"] = self.log_buffer.get_queue_size()
+                except Exception:
+                    pass
 
                 payload = {
                     "type": "heartbeat",
@@ -267,6 +308,7 @@ class AgentDaemon:
         """Apagado ordenado del agente."""
         logger.info("Deteniendo LinuxOps Agent...")
         self.running = False
+        self.log_shipper.stop()
         for session in self.terminal_sessions.values():
             session.terminate()
         self.terminal_sessions.clear()
@@ -287,4 +329,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

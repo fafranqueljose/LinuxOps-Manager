@@ -22,6 +22,7 @@ export const Sidebar: React.FC = () => {
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, show: true },
     { label: 'Servidores', path: '/servers', icon: Server, show: hasPermission('servers:read') },
+    { label: 'Logs', path: '/logs', icon: FileText, show: hasPermission('logs:read') },
     { label: 'Agentes mTLS', path: '/agents', icon: KeyRound, show: hasPermission('agents:read') },
     { label: 'Auditoría', path: '/audit', icon: ShieldCheck, show: hasPermission('audit:read') },
     { label: 'Alertas', path: '/alerts', icon: Bell, show: true },
@@ -87,4 +88,3 @@ export const Sidebar: React.FC = () => {
     </aside>
   );
 };
-
