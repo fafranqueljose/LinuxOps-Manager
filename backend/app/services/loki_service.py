@@ -67,10 +67,15 @@ class LokiService:
     ) -> int:
         """
         Agrupa los registros por etiquetas de flujo (stream labels) y los empuja a Loki.
-        Sanitiza secretos y garantiza timestamps estrictamente ascendentes.
+        Sanitiza secretos, valida ventanas temporales y garantiza monotonía estricta.
         """
         if not records:
             return 0
+
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        # Ventana mínima para evitar rechazo por "entry too old" / "entry too far behind"
+        min_allowed_ts = now_utc - datetime.timedelta(days=6)
+        max_allowed_ts = now_utc + datetime.timedelta(hours=1)
 
         streams_map: Dict[Tuple[str, str, str, str, str, str], List[Tuple[int, str]]] = {}
 
@@ -92,6 +97,13 @@ class LokiService:
             ts = rec.timestamp
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=datetime.timezone.utc)
+
+            # Acotar timestamps antiguos o futuros para evitar que Loki rechace el lote completo
+            if ts < min_allowed_ts:
+                ts = min_allowed_ts
+            elif ts > max_allowed_ts:
+                ts = now_utc
+
             nanos_int = int(ts.timestamp() * 1e9)
 
             if clean_meta:
@@ -105,31 +117,33 @@ class LokiService:
 
             streams_map[key].append((nanos_int, log_line))
 
-        loki_streams = []
-        for (sid, sname, src, svc, lvl, strm), values in streams_map.items():
-            # Ordenar valores por timestamp ascendente y asegurar monotonía estricta
-            values.sort(key=lambda x: x[0])
-            unique_values = []
-            last_ts = 0
-            for ts_int, line in values:
-                if ts_int <= last_ts:
-                    ts_int = last_ts + 1
-                last_ts = ts_int
-                unique_values.append([str(ts_int), line])
+        def _build_loki_payload(streams_dict: dict) -> dict:
+            built_streams = []
+            for (sid, sname, src, svc, lvl, strm), values in streams_dict.items():
+                values.sort(key=lambda x: x[0])
+                unique_values = []
+                last_ts = 0
+                for ts_int, line in values:
+                    if ts_int <= last_ts:
+                        ts_int = last_ts + 1000  # Avanzar 1 microsegundo para monotonía
+                    last_ts = ts_int
+                    unique_values.append([str(ts_int), line])
 
-            loki_streams.append({
-                "stream": {
-                    "server_id": sid,
-                    "server_name": sname,
-                    "source": src,
-                    "service": svc,
-                    "level": lvl,
-                    "stream": strm,
-                },
-                "values": unique_values,
-            })
+                built_streams.append({
+                    "stream": {
+                        "server_id": sid,
+                        "server_name": sname,
+                        "source": src,
+                        "service": svc,
+                        "level": lvl,
+                        "stream": strm,
+                        "stream_type": strm,
+                    },
+                    "values": unique_values,
+                })
+            return {"streams": built_streams}
 
-        push_payload = {"streams": loki_streams}
+        push_payload = _build_loki_payload(streams_map)
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             res = await client.post(
@@ -137,8 +151,32 @@ class LokiService:
                 headers=self._get_headers(),
                 json=push_payload,
             )
+            
+            # Si Loki rechaza por orden temporal o histórico, auto-recuperar rebasando a tiempo actual
+            if res.status_code == 400 and any(err in res.text.lower() for err in ["out of order", "too old", "too far behind"]):
+                logger.warning(
+                    f"Loki reportó restricción de timestamp ({res.text[:150]}). "
+                    f"Reintentando con timestamps normalizados al presente para garantizar ingesta..."
+                )
+                current_nanos = int(time.time() * 1e9)
+                normalized_map = {}
+                offset = 0
+                for k, vals in streams_map.items():
+                    norm_vals = []
+                    for _, line in vals:
+                        norm_vals.append((current_nanos + offset, line))
+                        offset += 1000
+                    normalized_map[k] = norm_vals
+
+                retry_payload = _build_loki_payload(normalized_map)
+                res = await client.post(
+                    f"{self.base_url}/loki/api/v1/push",
+                    headers=self._get_headers(),
+                    json=retry_payload,
+                )
+
             if res.status_code not in (200, 204):
-                err_msg = f"Error al enviar logs a Loki ({res.status_code}): {res.text[:200]}"
+                err_msg = f"Error al enviar logs a Loki ({res.status_code}): {res.text[:300]}"
                 logger.error(err_msg)
                 raise RuntimeError(err_msg)
 
@@ -235,7 +273,7 @@ class LokiService:
                     src = stream_labels.get("source", "unknown")
                     svc = stream_labels.get("service", "generic")
                     lvl = stream_labels.get("level", "info")
-                    strm = stream_labels.get("stream", "stdout")
+                    strm = stream_labels.get("stream") or stream_labels.get("stream_type", "stdout")
 
                     parsed_sid = UUID(sid) if sid else UUID("00000000-0000-0000-0000-000000000000")
 

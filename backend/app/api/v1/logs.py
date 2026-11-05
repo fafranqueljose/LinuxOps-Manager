@@ -94,7 +94,7 @@ async def ingest_logs(
         logger.error(f"Error procesando lote de logs {payload.batch_id} para servidor {server_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Fallo al persistir registros en el motor central de logs (Loki).",
+            detail=f"Fallo al persistir registros en Loki: {str(e)}",
         )
 
     return LogBatchIngestOut(

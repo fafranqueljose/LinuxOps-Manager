@@ -61,12 +61,14 @@ class LogCollector:
 
             # Obtener timestamp del último log procesado
             last_cursor = self.buffer.get_checkpoint("docker", checkpoint_key)
-            since_param = None
             if last_cursor:
                 try:
                     since_param = int(float(last_cursor)) + 1
                 except Exception:
-                    since_param = None
+                    since_param = int(time.time() - 86400)
+            else:
+                # Primera recolección: acotar a últimas 24h para evitar logs obsoletos
+                since_param = int(time.time() - 86400)
 
             try:
                 raw_logs = container.logs(
@@ -74,7 +76,7 @@ class LogCollector:
                     stderr=True,
                     timestamps=True,
                     since=since_param,
-                    tail=max_lines_per_container if since_param is None else None,
+                    tail=max_lines_per_container,
                 )
 
                 if not raw_logs:
@@ -178,7 +180,7 @@ class LogCollector:
             if last_cursor:
                 cmd.extend(["--since", f"@{last_cursor}"])
             else:
-                cmd.extend(["-n", str(max_lines_per_unit)])
+                cmd.extend(["--since=-24h", "-n", str(max_lines_per_unit)])
 
             exec_cmd = cmd
             if hasattr(subprocess, "run"):
