@@ -7,6 +7,7 @@ import { LoginView } from '@/modules/auth/LoginView';
 import { DashboardView } from '@/modules/dashboard/DashboardView';
 import { ServersView } from '@/modules/servers/ServersView';
 import { ServerDetailView } from '@/modules/servers/ServerDetailView';
+import { ContainerCatalogView } from '@/modules/docker/ContainerCatalogView';
 import { LogsView } from '@/modules/logs/LogsView';
 import { AgentsView } from '@/modules/agents/AgentsView';
 import { AuditView } from '@/modules/audit/AuditView';
@@ -36,6 +37,7 @@ export const App: React.FC = () => {
               <Route path="/dashboard" element={<DashboardView />} />
               <Route path="/servers" element={<ServersView />} />
               <Route path="/servers/:serverId" element={<ServerDetailView />} />
+              <Route path="/docker/catalog" element={<ContainerCatalogView />} />
               <Route path="/logs" element={<LogsView />} />
               <Route path="/agents" element={<AgentsView />} />
               <Route path="/audit" element={<AuditView />} />

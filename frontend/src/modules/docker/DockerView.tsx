@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
-import { Box, Layers, Share2, Database } from 'lucide-react';
+import { Box, Layers, Share2, Database, BookOpen } from 'lucide-react';
 import { ContainersTab } from './ContainersTab';
 import { ImagesTab } from './ImagesTab';
 import { NetworksTab } from './NetworksTab';
 import { VolumesTab } from './VolumesTab';
+import { ContainerCatalogView } from './ContainerCatalogView';
 
 interface DockerViewProps {
   serverId: string;
 }
 
 export const DockerView: React.FC<DockerViewProps> = ({ serverId }) => {
-  const [subTab, setSubTab] = useState<'containers' | 'images' | 'networks' | 'volumes'>('containers');
+  const [subTab, setSubTab] = useState<'containers' | 'catalog' | 'images' | 'networks' | 'volumes'>('containers');
 
   return (
     <div className="space-y-6">
@@ -26,6 +27,18 @@ export const DockerView: React.FC<DockerViewProps> = ({ serverId }) => {
         >
           <Box className="h-4 w-4" />
           <span>Contenedores</span>
+        </button>
+
+        <button
+          onClick={() => setSubTab('catalog')}
+          className={`pb-2.5 px-3 flex items-center gap-2 border-b-2 transition-colors ${
+            subTab === 'catalog'
+              ? 'border-brand-500 text-brand-400 font-bold'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <BookOpen className="h-4 w-4" />
+          <span>Catálogo y Documentación</span>
         </button>
 
         <button
@@ -67,6 +80,7 @@ export const DockerView: React.FC<DockerViewProps> = ({ serverId }) => {
 
       {/* Contenido según la sub-pestaña activa */}
       {subTab === 'containers' && <ContainersTab serverId={serverId} />}
+      {subTab === 'catalog' && <ContainerCatalogView initialServerId={serverId} isEmbedded={true} />}
       {subTab === 'images' && <ImagesTab serverId={serverId} />}
       {subTab === 'networks' && <NetworksTab serverId={serverId} />}
       {subTab === 'volumes' && <VolumesTab serverId={serverId} />}

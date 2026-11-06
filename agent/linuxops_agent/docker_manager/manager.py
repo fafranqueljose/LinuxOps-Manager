@@ -123,6 +123,7 @@ class DockerManager:
                 "ports": ports_list,
                 "compose_project": compose_project,
                 "compose_service": compose_service,
+                "labels": labels,
             })
         return result
 
@@ -133,6 +134,7 @@ class DockerManager:
 
         raw_env = attrs.get("Config", {}).get("Env", []) or []
         safe_env = sanitize_env_list(raw_env)
+        labels = attrs.get("Config", {}).get("Labels", {}) or {}
 
         return {
             "id": c.id,
@@ -144,6 +146,7 @@ class DockerManager:
             "network_settings": attrs.get("NetworkSettings", {}),
             "mounts": attrs.get("Mounts", []),
             "env_safe": safe_env,
+            "labels": labels,
         }
 
     def execute_container_action(self, container_id: str, action: str, timeout: int = 10) -> None:

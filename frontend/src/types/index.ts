@@ -93,6 +93,8 @@ export interface Container {
   ports: ContainerPort[];
   compose_project?: string;
   compose_service?: string;
+  labels?: Record<string, string>;
+  documentation_status?: string;
 }
 
 export interface DockerImage {
@@ -289,4 +291,97 @@ export interface LogFilterParams {
   end_time?: string;
   limit?: number;
   direction?: 'BACKWARD' | 'FORWARD';
+}
+
+// ==========================================
+// Módulo de Catálogo y Documentación de Contenedores
+// ==========================================
+export type DocumentationStatus = 'undocumented' | 'suggested' | 'documented' | 'review_pending';
+export type DocumentationSource = 'manual' | 'docker_labels' | 'auto';
+
+export interface ContainerDocumentation {
+  id?: string;
+  server_id: string;
+  server_name?: string;
+  identity_key: string;
+  container_id?: string;
+  container_name: string;
+  compose_project?: string;
+  compose_service?: string;
+  image_name?: string;
+  description?: string;
+  purpose?: string;
+  application_name?: string;
+  category: string;
+  owner?: string;
+  environment: 'development' | 'testing' | 'staging' | 'production' | string;
+  documentation_source: DocumentationSource;
+  documentation_status: DocumentationStatus;
+  generated_description?: string;
+  generated_purpose?: string;
+  generated_category?: string;
+  labels_snapshot?: Record<string, string>;
+  created_at?: string;
+  updated_at?: string;
+  updated_by?: string;
+
+  // Datos técnicos en vivo
+  state?: string;
+  status_text?: string;
+  created_epoch?: number;
+  ports?: any[];
+  networks?: string[];
+  mounts?: any[];
+}
+
+export interface ContainerCatalogItem {
+  id?: string;
+  server_id: string;
+  server_name: string;
+  container_id: string;
+  container_name: string;
+  image: string;
+  state: string;
+  status: string;
+  compose_project?: string;
+  compose_service?: string;
+  application_name?: string;
+  category: string;
+  owner?: string;
+  environment: string;
+  documentation_status: DocumentationStatus;
+  documentation_source: DocumentationSource;
+  description?: string;
+  purpose?: string;
+  has_labels: boolean;
+  updated_at?: string;
+}
+
+export interface ContainerCatalogSummary {
+  total_containers: number;
+  documented_count: number;
+  suggested_count: number;
+  undocumented_count: number;
+  review_pending_count: number;
+  categories: Record<string, number>;
+  environments: Record<string, number>;
+  applications: Record<string, number>;
+}
+
+export interface ContainerDocumentationUpdate {
+  description?: string;
+  purpose?: string;
+  application_name?: string;
+  category?: string;
+  owner?: string;
+  environment?: string;
+  documentation_status?: DocumentationStatus;
+}
+
+export interface ContainerDocumentationGenerateResult {
+  generated_description: string;
+  generated_purpose: string;
+  generated_category: string;
+  source_rule: string;
+  labels_detected: Record<string, string>;
 }

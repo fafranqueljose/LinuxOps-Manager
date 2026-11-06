@@ -19,7 +19,9 @@ import {
   CheckCircle2,
   XCircle,
   FolderGit2,
+  Sparkles,
 } from 'lucide-react';
+import { ContainerDocModal } from './ContainerDocModal';
 
 interface ContainersTabProps {
   serverId: string;
@@ -31,6 +33,7 @@ export const ContainersTab: React.FC<ContainersTabProps> = ({ serverId }) => {
   // Estados de modales
   const [selectedContainer, setSelectedContainer] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<'logs' | 'inspect' | null>(null);
+  const [docModalContainer, setDocModalContainer] = useState<string | null>(null);
   const [logsContent, setLogsContent] = useState<string>('');
   const [inspectData, setInspectData] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -326,6 +329,7 @@ export const ContainersTab: React.FC<ContainersTabProps> = ({ serverId }) => {
             handleAction={handleAction}
             openLogs={openLogs}
             openInspect={openInspect}
+            openDocumentation={(id) => setDocModalContainer(id)}
           />
         </div>
       ) : (
@@ -375,6 +379,7 @@ export const ContainersTab: React.FC<ContainersTabProps> = ({ serverId }) => {
                       handleAction={handleAction}
                       openLogs={openLogs}
                       openInspect={openInspect}
+                      openDocumentation={(id) => setDocModalContainer(id)}
                     />
                   </div>
                 )}
@@ -432,6 +437,17 @@ export const ContainersTab: React.FC<ContainersTabProps> = ({ serverId }) => {
           </div>
         </div>
       )}
+
+      {/* Modal de Ficha y Documentación de Contenedor */}
+      {docModalContainer && (
+        <ContainerDocModal
+          serverId={serverId}
+          containerId={docModalContainer}
+          isOpen={true}
+          onClose={() => setDocModalContainer(null)}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ['docker-containers', serverId] })}
+        />
+      )}
     </div>
   );
 };
@@ -445,6 +461,7 @@ interface ContainerTableProps {
   handleAction: (id: string, action: string) => void;
   openLogs: (id: string) => void;
   openInspect: (id: string) => void;
+  openDocumentation: (id: string) => void;
 }
 
 const ContainerTable: React.FC<ContainerTableProps> = ({
@@ -453,6 +470,7 @@ const ContainerTable: React.FC<ContainerTableProps> = ({
   handleAction,
   openLogs,
   openInspect,
+  openDocumentation,
 }) => {
   return (
     <table className="w-full text-left text-xs">
@@ -553,6 +571,14 @@ const ContainerTable: React.FC<ContainerTableProps> = ({
                         actionLoading === `${c.id}-restart` ? 'animate-spin text-brand-400' : ''
                       }`}
                     />
+                  </button>
+
+                  <button
+                    onClick={() => openDocumentation(c.id)}
+                    title="Ficha y documentación del contenedor"
+                    className="p-1.5 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 rounded-lg transition-colors border border-brand-500/20"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
                   </button>
 
                   <button

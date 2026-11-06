@@ -12,6 +12,7 @@ import {
   LogOut,
   KeyRound,
   FileText,
+  Box,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
@@ -22,6 +23,7 @@ export const Sidebar: React.FC = () => {
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, show: true },
     { label: 'Servidores', path: '/servers', icon: Server, show: hasPermission('servers:read') },
+    { label: 'Catálogo Docker', path: '/docker/catalog', icon: Box, show: hasPermission('docker:read') },
     { label: 'Logs', path: '/logs', icon: FileText, show: hasPermission('logs:read') },
     { label: 'Agentes mTLS', path: '/agents', icon: KeyRound, show: hasPermission('agents:read') },
     { label: 'Auditoría', path: '/audit', icon: ShieldCheck, show: hasPermission('audit:read') },

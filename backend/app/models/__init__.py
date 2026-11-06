@@ -9,6 +9,7 @@ from app.models.metric import ServerMetric
 from app.models.task import Task, TerminalSession
 from app.models.audit import AuditLog
 from app.models.alert import Alert, SystemSetting
+from app.models.container_doc import ContainerDocumentation
 
 __all__ = [
     "User",
@@ -29,5 +30,6 @@ __all__ = [
     "AuditLog",
     "Alert",
     "SystemSetting",
+    "ContainerDocumentation",
 ]
 

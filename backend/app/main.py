@@ -36,6 +36,7 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.storage import router as storage_router
 from app.api.v1.logs import router as logs_router
+from app.api.v1.container_catalog import router as container_catalog_router
 
 # Routers WebSockets
 from app.api.ws.agent_ws import router as ws_agent_router
@@ -322,6 +323,7 @@ app.include_router(dashboard_router, prefix=api_prefix)
 app.include_router(settings_router, prefix=api_prefix)
 app.include_router(storage_router, prefix=api_prefix)
 app.include_router(logs_router, prefix=api_prefix)
+app.include_router(container_catalog_router, prefix=api_prefix)
 
 # Registrar Routers WebSockets (compatibles con /api/v1/ws/... y /ws/...)
 app.include_router(ws_agent_router, prefix=api_prefix)

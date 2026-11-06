@@ -24,6 +24,7 @@ class ContainerOut(BaseModel):
     ports: List[ContainerPort] = []
     compose_project: Optional[str] = None
     compose_service: Optional[str] = None
+    labels: Dict[str, str] = Field(default_factory=dict)
 
 
 class ContainerDetailOut(BaseModel):
@@ -37,6 +38,7 @@ class ContainerDetailOut(BaseModel):
     mounts: List[Dict[str, Any]]
     env_safe: List[str] = []  # Claves y valores filtrados para ocultar contraseñas/secretos
     stats: Optional[Dict[str, Any]] = None
+    labels: Dict[str, str] = Field(default_factory=dict)
 
 
 class ContainerActionRequest(BaseModel):
